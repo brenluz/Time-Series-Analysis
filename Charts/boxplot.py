@@ -12,7 +12,7 @@ MONTH_NAMES_PT = {
 }
 
 
-def generate_monthly_boxplot_grid(df_wide, product_name, value_name):
+def generate_boxplot_grid(df_wide, product_name, value_name):
     """
     Agrega a série temporal por MÊS e gera uma grade estática (3x4) de 12 boxplots,
     um para cada mês, mostrando a distribuição de preços por Estado (UF).

@@ -1,7 +1,10 @@
 import math
+from functools import partial
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pmdarima as pm
 import numpy as np
 import torch
@@ -1023,18 +1026,160 @@ def generate_sliding_chart(rmse_series: pd.Series, model_name: str, product_name
 
     return fig
 
+
+def _model_forecast_arima(series, n_periods=12):
+    """Wrapper para auto_arima_forecast com parâmetros padrão."""
+    return auto_arima_forecast(series, seasonal=True, m=12, n_periods=n_periods)
+
+
+def _model_forecast_ets(series, n_periods=12):
+    """Wrapper para ets_forecast com parâmetros padrão."""
+    return ets_forecast(series, n_periods=n_periods, m=12, trend='add', seasonal_model='add')
+
+
+def _model_forecast_prophet(series, n_periods=12):
+    """Wrapper para prophet_forecast com parâmetros padrão."""
+    return prophet_forecast(series, seasonal=True, m=12, n_periods=n_periods)
+
+
+def sliding_rmse_boxplots(
+    df,
+    product_name="",
+    test_periods=12,
+    n_periods=12,
+    min_train_size=36,
+    max_windows=12,
+    output_path=None,
+):
+    """
+    Calcula o erro (actual - predicted) para cada passo da previsão em validação deslizante
+    (walk-forward) para todos os modelos e estados, e gera 12 boxplots (um por passo).
+
+    Em cada gráfico há 7 boxplots (um por modelo), onde cada boxplot mostra a distribuição
+    dos erros de previsão naquele passo específico, agregando todos os estados e janelas
+    deslizantes.
+
+    Parâmetros:
+    - df (pd.DataFrame): DataFrame com Datas como índice e Estados (UFs) como colunas.
+    - product_name (str): Nome do produto para os títulos dos gráficos.
+    - test_periods (int): Número de períodos de teste por janela (horizonte de previsão).
+    - n_periods (int): Mesmo que test_periods, usado na chamada dos modelos.
+    - min_train_size (int): Tamanho mínimo da série de treino para cada janela.
+    - max_windows (int): Número máximo de janelas deslizantes por estado (padrão 12).
+    - output_path (str, opcional): Caminho base para salvar os HTMLs (ex: 'sliding_rmse_step').
+                                   Se None, não salva arquivos.
+
+    Retorna:
+    - list: Lista de até 12 figuras Plotly, uma para cada passo de previsão.
+    """
+    MODEL_FUNCS = {
+        "ARIMA": _model_forecast_arima,
+        "ETS": _model_forecast_ets,
+        "Prophet": _model_forecast_prophet,
+        "Random Forest": random_forest,
+        "LSTM": lstm_forecast,
+        "GRU": gru_forecast,
+        "Transformer": conv_transformer_forecast,
+    }
+
+    # Estrutura: errors_by_step[step_idx][model_name] = lista de erros (todos os estados e janelas)
+    errors_by_step = {step: {m: [] for m in MODEL_FUNCS} for step in range(test_periods)}
+    states = df.columns.tolist()
+
+    for state in states:
+        series = df[state].dropna()
+        if len(series) < min_train_size + test_periods:
+            continue
+
+        # Janelas: end_idx indica o fim do conjunto de teste; fazemos no máximo max_windows janelas
+        start_end = len(series)
+        stop_end = max(min_train_size + test_periods - 1, start_end - max_windows)
+
+        for end_idx in range(start_end, stop_end, -1):
+            if end_idx - test_periods < min_train_size:
+                break
+
+            test_series = series.iloc[end_idx - test_periods : end_idx]
+            train_series = series.iloc[: end_idx - test_periods]
+
+            for model_name, model_func in MODEL_FUNCS.items():
+                try:
+                    forecast, _ = model_func(train_series, n_periods=test_periods)
+                    if forecast is None or len(forecast) != len(test_series):
+                        continue
+
+                    aligned_forecast = pd.Series(forecast.values, index=test_series.index)
+                    errors = test_series.values - aligned_forecast.values
+
+                    for step in range(test_periods):
+                        if step < len(errors):
+                            errors_by_step[step][model_name].append(errors[step])
+                except Exception as e:
+                    continue
+
+    # Gerar 12 figuras (uma por passo)
+    figures = []
+    for step in range(test_periods):
+        # Preparar dados em formato longo para Plotly
+        rows = []
+        for model_name in MODEL_FUNCS:
+            errs = errors_by_step[step][model_name]
+            for e in errs:
+                rows.append({"Model": model_name, "Erro": e})
+
+        if not rows:
+            continue
+
+        df_plot = pd.DataFrame(rows)
+
+        fig = go.Figure()
+        for model_name in MODEL_FUNCS:
+            vals = df_plot[df_plot["Model"] == model_name]["Erro"].values
+            if len(vals) > 0:
+                fig.add_trace(
+                    go.Box(
+                        x=[model_name] * len(vals),
+                        y=vals,
+                        name=model_name,
+                        boxpoints="outliers",
+                        jitter=0.3,
+                        pointpos=-1.8,
+                    )
+                )
+
+        fig.update_layout(
+            title=f"Passo {step + 1} - Distribuição do Erro de Previsão por Modelo"
+            + (f" ({product_name})" if product_name else ""),
+            title_x=0.5,
+            xaxis_title="Modelo",
+            yaxis_title="Erro (Real - Previsto)",
+            template="plotly_white",
+            height=500,
+            width=900,
+            showlegend=False,
+        )
+        fig.update_xaxes(tickangle=45)
+        figures.append(fig)
+
+        if output_path:
+            out = f"{output_path}_passo{step + 1:02d}.html"
+            fig.write_html(out)
+
+    return figures
+
+
 # --- Execução Principal ---
 if __name__ == "__main__":
     EXCEL_FILE_PATH = "../Databases/DatabaseConabv5.xlsx"
-    SHEET_NAME = "ACUCAR"
+    SHEET_NAME = "ARROZ"
     OUTPUT_HTML_PATH = 'previsao_interativa.html'
 
     TEST_PERIODS = 12
     FORECAST_PERIODS = 12
-    MODEL_TO_RUN = "Transformer"
-    # Opções: "Auto_Arima", "ETS", "Prophet", "error_comparison_table", "Random_Forest", "sliding_error_chart"
+    MODEL_TO_RUN = "error_comparison_table"
+    # Opções: "Auto_Arima", "ETS", "Prophet", "error_comparison_table", "Random_Forest", "sliding_error_chart", "sliding_rmse_boxplots"
     # LSTM", "GRU", "Transformer"
-    UF="BA"
+    UF="MS"
 
     # 1. Carrega os dados
     df = pd.read_excel(EXCEL_FILE_PATH, sheet_name=SHEET_NAME, index_col=0)
@@ -1069,7 +1214,7 @@ if __name__ == "__main__":
     elif MODEL_TO_RUN == "error_comparison_table":
         df_rmse = error_comparison_table(df, test_periods=TEST_PERIODS, n_periods=FORECAST_PERIODS)
         print("\n--- TABELA COMPARATIVA DE RMSE DOS MODELOS ---")
-        df_rmse.to_excel("modelos.xlsx")
+        df_rmse.to_excel(f"{MODEL_TO_RUN}_modelos.xlsx")
         exit(0)
     elif MODEL_TO_RUN == "Random_Forest":
         model_name = "Random Forest"
@@ -1080,6 +1225,22 @@ if __name__ == "__main__":
         error_values = sliding_error_chart(series,model_func, model_name, test_periods=TEST_PERIODS, n_periods=FORECAST_PERIODS)
         fig = generate_sliding_chart(error_values, model_name, SHEET_NAME, UF)
         fig.write_html(OUTPUT_HTML_PATH, auto_open=True)
+        exit(0)
+    elif MODEL_TO_RUN == "sliding_rmse_boxplots":
+        figures = sliding_rmse_boxplots(
+            df,
+            product_name=SHEET_NAME,
+            test_periods=TEST_PERIODS,
+            n_periods=FORECAST_PERIODS,
+            min_train_size=36,
+            max_windows=12,
+            output_path="sliding_rmse_boxplot",
+        )
+        if figures:
+            figures[0].write_html("sliding_rmse_boxplot_passo01.html", auto_open=True)
+            for i, fig in enumerate(figures[1:], start=2):
+                fig.write_html(f"sliding_rmse_boxplot_passo{i:02d}.html")
+            print(f"Gerados {len(figures)} gráficos de boxplot (passo 1 a {len(figures)}).")
         exit(0)
     elif MODEL_TO_RUN == "LSTM":
         model_name = "LSTM"
