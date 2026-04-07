@@ -1,8 +1,12 @@
 import math
-from functools import partial
+import os
+import logging
+import hashlib
+import pickle
+import warnings
+warnings.filterwarnings("ignore")
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pmdarima as pm
@@ -10,1260 +14,1047 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch import Tensor, optim
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
+import joblib
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from prophet import Prophet
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+
 def calculate_rmse(actual, predicted):
-    """
-    Calcula o Root Mean Squared Error (RMSE) entre os valores reais e previstos.
-
-    Parâmetros:
-    - actual (pd.Series): Série com os valores reais.
-    - predicted (pd.Series): Série com os valores previstos.
-
-    Retorna:
-    - rmse (float): O valor do RMSE calculado.
-    """
-    error = actual - predicted
-    mse = (error ** 2).mean()
-    rmse = mse ** 0.5
-    return rmse
+    return ((( actual - predicted) ** 2).mean()) ** 0.5
 
 def calculate_mape(actual, predicted):
-    """
-    Calcula o Mean Absolute Percentage Error (MAPE) entre os valores reais e previstos.
+    return (abs((actual - predicted) / actual)).mean() * 100
 
-    Parâmetros:
-    - actual (pd.Series): Série com os valores reais.
-    - predicted (pd.Series): Série com os valores previstos.
 
-    Retorna:
-    - mape (float): O valor do MAPE calculado em porcentagem.
-    """
-    error = abs((actual - predicted) / actual)
-    mape = error.mean() * 100
-    return mape
+# ---------------------------------------------------------------------------
+# Feature Engineering
+# ---------------------------------------------------------------------------
 
-def create_features(df, lag_start=1, lag_end=12,rolling_window=3):
-    """
-    Cria features de Machine Learning (lags e features temporais) para a série temporal.
-
-    Parameters:
-    - df (pd.DataFrame): DataFrame com 'ds' (Date) e 'y' (Value).
-    - lag_start (int): Início da defasagem (lag).
-    - lag_end (int): Fim da defasagem (lag).
-    - rolling_window (int): Tamanho da janela para média móvel.
-
-    Returns:
-    - pd.DataFrame: DataFrame com as novas features.
-    """
-
+def create_features(df, lag_start=1, lag_end=12, rolling_window=3):
     df_features = df.copy()
-
     df_features['ds'] = pd.to_datetime(df_features['ds'])
-
     df_features['year'] = df_features['ds'].dt.year
     df_features['month'] = df_features['ds'].dt.month
     df_features['dayofweek'] = df_features['ds'].dt.dayofweek
     df_features['dayofyear'] = df_features['ds'].dt.dayofyear
-
-    # 2. Lagged Values (Capturam Autocorrelação)
     for lag in range(lag_start, lag_end + 1):
         df_features[f'lag_{lag}'] = df_features['y'].shift(lag)
-
-    # 3. Rolling Window Features (Capturam Tendência e Variação)
     df_features['rolling_mean'] = df_features['y'].shift(lag_start).rolling(window=rolling_window).mean()
     df_features['rolling_std'] = df_features['y'].shift(lag_start).rolling(window=rolling_window).std()
-
     return df_features.dropna()
 
+
 def series_to_sequences(series, n_steps):
-    X, y = list(), list()
-    for i in range(len(series)):
-        end_ix = i + n_steps
-        if end_ix > len(series) - 1:
-            break
-        # seq_x: janela de n_steps (passado), seq_y: próximo valor (futuro)
-        seq_x, seq_y = series[i:end_ix], series[end_ix]
-        X.append(seq_x)
-        y.append(seq_y)
+    X, y = [], []
+    for i in range(len(series) - n_steps):
+        X.append(series[i:i + n_steps])
+        y.append(series[i + n_steps])
     return np.array(X), np.array(y)
 
-class LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_layer_size, output_size):
-        super().__init__()
-        self.hidden_layer_size = hidden_layer_size
-        self.lstm = nn.LSTM(input_size, hidden_layer_size)
-        self.linear = nn.Linear(hidden_layer_size, output_size)
-        self.hidden_cell = (torch.zeros(1, 1, self.hidden_layer_size),
-                            torch.zeros(1, 1, self.hidden_layer_size))
 
-    def forward(self, input_seq):
-        lstm_out, self.hidden_cell = self.lstm(input_seq.view(len(input_seq), 1, -1), self.hidden_cell)
-        predictions = self.linear(lstm_out.view(len(input_seq), -1))
-        return predictions[-1]
+# ---------------------------------------------------------------------------
+# Models (batch_first=True for efficiency)
+# ---------------------------------------------------------------------------
+
+class LSTMModel(nn.Module):
+    def __init__(self, input_size=1, hidden_layer_size=50, output_size=1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_layer_size, batch_first=True)
+        self.linear = nn.Linear(hidden_layer_size, output_size)
+
+    def forward(self, x):
+        out, _ = self.lstm(x)
+        return self.linear(out[:, -1, :]).squeeze(1)
+
 
 class GRUmodel(nn.Module):
-    def __init__(self, input_size, hidden_layer_size, output_size):
+    def __init__(self, input_size=1, hidden_layer_size=50, output_size=1):
         super().__init__()
-        self.hidden_layer_size = hidden_layer_size
-        self.gru = nn.GRU(input_size, hidden_layer_size)
+        self.gru = nn.GRU(input_size, hidden_layer_size, batch_first=True)
         self.linear = nn.Linear(hidden_layer_size, output_size)
-        self.hidden_cell = torch.zeros(1, 1, self.hidden_layer_size)
 
-    def forward(self, input_seq):
-        gru_out, self.hidden_cell = self.gru(input_seq.view(len(input_seq), 1, -1), self.hidden_cell)
-        predictions = self.linear(gru_out.view(len(input_seq), -1))
-        return predictions[-1]
+    def forward(self, x):
+        out, _ = self.gru(x)
+        return self.linear(out[:, -1, :]).squeeze(1)
 
-# class PositionalEncoding(nn.Module):
-#
-#     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-#         super().__init__()
-#         self.dropout = nn.Dropout(p=dropout)
-#
-#         position = torch.arange(max_len).unsqueeze(1)
-#         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-#         pe = torch.zeros(max_len, 1, d_model)
-#         pe[:, 0, 0::2] = torch.sin(position * div_term)
-#         pe[:, 0, 1::2] = torch.cos(position * div_term)
-#         self.register_buffer('pe', pe)
-#
-#     def forward(self, x: Tensor) -> Tensor:
-#         """
-#         Arguments:
-#             x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-#         """
-#         x = x + self.pe[:x.size(0)]
-#         return self.dropout(x)
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
-        super(PositionalEncoding, self).__init__()
+        super().__init__()
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-
-        # Usando math.log
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        # self.pe is stored as [max_len, d_model]
         self.register_buffer('pe', pe)
 
     def forward(self, x: Tensor) -> Tensor:
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-        """
-        seq_len = x.size(0)
+        return x + self.pe[:x.size(0), :].unsqueeze(1)
 
-        # 1. Slice PE: [seq_len, d_model]
-        pe_slice = self.pe[:seq_len, :]
-
-        # 2. CRÍTICO: Adiciona a dimensão do batch (tamanho 1) de volta: [seq_len, 1, d_model]
-        # Isso garante que a soma por broadcasting funcione corretamente na dimensão 1 (Batch).
-        pe_slice_expanded = pe_slice.unsqueeze(1)
-
-        # 3. Adiciona PE ao input X.
-        return x + pe_slice_expanded
 
 class TimeSeriesTransformer(nn.Module):
-    def __init__(self, input_dim, d_model, nhead, num_layers, dropout=0.1):
-        super(TimeSeriesTransformer, self).__init__()
-
-        self.input_linear = nn.Linear(input_dim, d_model)
+    def __init__(self, input_dim=1, d_model=128, nhead=8, num_layers=3, dropout=0.1):
+        super().__init__()
         self.d_model = d_model
-
+        self.input_linear = nn.Linear(input_dim, d_model)
         self.pos_encoder = PositionalEncoding(d_model)
-
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dropout=dropout, batch_first=False)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=False
+        )
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
         self.output_linear = nn.Linear(d_model, 1)
-        self.init_weights()
-
-    def init_weights(self):
-        initrange = 0.1
-        self.input_linear.weight.data.uniform_(-initrange, initrange)
-        self.input_linear.bias.data.zero_()
-        self.output_linear.weight.data.uniform_(-initrange, initrange)
-        self.output_linear.bias.data.zero_()
+        for m in [self.input_linear, self.output_linear]:
+            m.weight.data.uniform_(-0.1, 0.1)
+            m.bias.data.zero_()
 
     def forward(self, src):
-        src = self.input_linear(src) * np.sqrt(self.d_model)
+        src = self.input_linear(src) * math.sqrt(self.d_model)
         src = self.pos_encoder(src)
         output = self.transformer_encoder(src)
-        prediction = self.output_linear(output[-1, :, :])
+        return self.output_linear(output[-1, :, :]).squeeze(1)
 
-        return prediction.squeeze(1)
 
-class ConvInputEmbedding(nn.Module):
-    """
-    Camada de Convolução 1D para extrair features locais antes do Transformer.
-    Requer transposição da entrada de [Seq_len, Batch, Features] para [Batch, Features, Seq_len].
-    """
+# ---------------------------------------------------------------------------
+# Shared batch trainer (no epoch reduction, early stopping instead)
+# ---------------------------------------------------------------------------
 
-    def __init__(self, input_dim, d_model):
-        super().__init__()
-        # Kernel size 3 é ideal para capturar correlações em janelas curtas
-        self.conv = nn.Conv1d(input_dim, d_model, kernel_size=3, padding=1)
+def _train_batch(model, X_tensor, y_tensor, epochs, lr=0.001, patience=15, clip=1.0):
+    """Full-batch training with early stopping — preserves accuracy, avoids wasted epochs."""
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    loss_fn = nn.MSELoss()
+    best_loss, counter = float('inf'), 0
+    model.train()
+    for _ in range(epochs):
+        optimizer.zero_grad()
+        loss = loss_fn(model(X_tensor), y_tensor)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), clip)
+        optimizer.step()
+        if loss.item() < best_loss - 1e-6:
+            best_loss, counter = loss.item(), 0
+        else:
+            counter += 1
+            if counter >= patience:
+                break
+    return model
 
-    def forward(self, x):
-        # x shape: [Seq_len, Batch_size, Features (1)]
 
-        # 1. Transpose para Conv1D: [Batch_size, Features, Seq_len]
-        x = x.transpose(0, 1).transpose(1, 2)
-
-        # 2. Convolução: [Batch_size, d_model, Seq_len]
-        x = self.conv(x)
-
-        # 3. Transpose de volta para Transformer: [Seq_len, Batch_size, d_model]
-        return x.transpose(1, 2).transpose(0, 1)
+# ---------------------------------------------------------------------------
+# Forecast functions (same interface as original)
+# ---------------------------------------------------------------------------
 
 def auto_arima_forecast(series, seasonal=True, m=12, n_periods=12):
-    """
-    Ajusta um modelo Auto ARIMA à série temporal e faz previsões.
-
-    Parâmetros:
-    - series (pd.Series): Série temporal univariada.
-    - seasonal (bool): Indica se o modelo deve considerar sazonalidade.
-    - m (int): Período sazonal (ex: 12 para dados mensais com sazonalidade anual).
-    - n_periods (int): Número de períodos futuros a serem previstos.
-    - test_periods (int): Número de períodos a serem usados para teste/validação.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo ARIMA ajustado.
-    """
-
-    # Ajustar o modelo Auto ARIMA
     model = pm.auto_arima(
-        series.dropna(),
-        d=1,
-        D=1,
-        start_p=1,
-        start_q=1,
-        max_p=5,
-        max_q=5,
-        seasonal=True,
-        m=m,
-        error_action='ignore',
-        suppress_warnings=True,
-        stepwise=True
+        series.dropna(), d=1, D=1, start_p=1, start_q=1, max_p=5, max_q=5,
+        seasonal=True, m=m, error_action='ignore', suppress_warnings=True, stepwise=True
     )
-
-    pred_array = model.predict(n_periods=n_periods)
-    last_date = series.index[-1]
-    freq_inferida = 'MS'
-    indice_futuro = pd.date_range(start=last_date,
-                                  periods=n_periods + 1,
-                                  freq=freq_inferida)[1:]
-
-    series_predictions = pd.Series(pred_array, index=indice_futuro)
-
-    return series_predictions, model
+    pred = model.predict(n_periods=n_periods)
+    idx = pd.date_range(start=series.index[-1], periods=n_periods + 1, freq='MS')[1:]
+    return pd.Series(pred, index=idx), model
 
 
 def ets_forecast(series, m=12, n_periods=12, trend='add', seasonal_model='add'):
-    """
-    Ajusta um modelo de Suavização Exponencial (Holt-Winters/ETS) à série
-    temporal e faz previsões.
-
-    Parâmetros:
-    - series (pd.Series): Série temporal univariada.
-    - seasonal (bool): Indica se o modelo deve considerar sazonalidade.
-    - m (int, opcional): Período sazonal (ex: 12 para dados mensais).
-                         Se seasonal=True e m=None, tentará inferir o período
-                         pela frequência do índice, mas é **altamente recomendado** especificar.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-    - trend (str, opcional): Tipo de componente de tendência: 'add' (aditiva),
-                             'mul' (multiplicativa) ou None (sem tendência). Padrão: 'add'.
-    - seasonal_model (str, opcional): Tipo de componente sazonal: 'add' (aditiva),
-                                      'mul' (multiplicativa) ou None. Padrão: 'add'.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model_fit: O objeto de resultados do modelo ajustado.
-    """
-
-    # 1. Preparar a série (remover NaNs)
-    series_clean = series.dropna()
-
-    # 2. Definir parâmetros para ExponentialSmoothing
-    trend_param = trend if trend is not None else None
-
-    # 3. Ajustar o modelo Exponential Smoothing (ETS/Holt-Winters)
+    clean = series.dropna()
     try:
-        model = ExponentialSmoothing(
-            series_clean,
-            trend=trend_param,
-            seasonal=seasonal_model,
-            seasonal_periods=m,
-            initialization_method='estimated'  # Deixa o statsmodels estimar os valores iniciais
-        )
-        # O .fit() realiza a otimização dos parâmetros de suavização (alpha, beta, gamma)
-        model_fit = model.fit()
-
-    except Exception as e:
-        print(f"Erro ao ajustar o modelo ETS: {e}")
-        # Uma alternativa seria tentar com um modelo mais simples (sem sazonalidade/tendência)
-        # Mas para manter a estrutura, vamos re-lançar o erro ou retornar None
+        fit = ExponentialSmoothing(
+            clean, trend=trend, seasonal=seasonal_model,
+            seasonal_periods=m, initialization_method='estimated'
+        ).fit()
+    except Exception:
         return pd.Series(dtype='float64'), None
+    idx = pd.date_range(start=clean.index[-1], periods=n_periods + 1, freq='MS')[1:]
+    return pd.Series(fit.forecast(n_periods), index=idx), fit
 
-    # 4. Fazer a previsão
-    pred_array = model_fit.forecast(steps=n_periods)
 
-    # 5. Criar o índice futuro (igual à função auto_arima)
-    last_date = series_clean.index[-1]
-
-    # Tenta inferir a frequência do índice
-    freq_inferida = "MS"
-    if freq_inferida is None:
-        try:
-            # Tenta inferir se não estiver explicitamente definido
-            freq_inferida = pd.infer_freq(series_clean.index)
-        except:
-            # Fallback para frequência mensal se a inferência falhar
-            freq_inferida = 'MS'
-
-    if freq_inferida is None:
-        raise ValueError(
-            "Não foi possível inferir a frequência da série temporal. Certifique-se de que o índice de data está configurado corretamente (ex: df.index.freq='MS').")
-
-    indice_futuro = pd.date_range(start=last_date,
-                                  periods=n_periods + 1,
-                                  freq=freq_inferida)[1:]
-
-    # 6. Criar a série de previsões com o índice futuro
-    series_predictions = pd.Series(pred_array, index=indice_futuro)
-
-    return series_predictions, model_fit
-
-def prophet_forecast(series, seasonal=True,m=12, n_periods=12):
-    """
-    Ajusta um modelo Prophet à série temporal e faz previsões.
-
-    Parâmetros:
-    - series (pd.Series): Série temporal univariada.
-    - seasonal (bool): Indica se o modelo deve considerar sazonalidade.
-    - m (int): Período sazonal (ex: 12 para dados mensais com sazonalidade anual).
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo Prophet ajustado.
-    """
-
-    # Preparar os dados para o Prophet
-    df_prophet = series.reset_index()
-    df_prophet.columns = ['ds', 'y']
-    df_prophet.dropna()
-
-    # Ajustar o modelo Prophet
+def prophet_forecast(series, seasonal=True, m=12, n_periods=12):
+    df_p = series.reset_index().dropna()
+    df_p.columns = ['ds', 'y']
     model = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=False)
-    if seasonal and m is not None and m > 1:
-        model.add_seasonality(name='custom_seasonal', period=m, fourier_order=5, mode='multiplicative')
-    model.fit(df_prophet)
-    # Criar DataFrame para períodos futuros
+    if seasonal and m and m > 1:
+        model.add_seasonality('custom_seasonal', period=m, fourier_order=5, mode='multiplicative')
+    model.fit(df_p)
     future = model.make_future_dataframe(periods=n_periods, freq='MS')
+    fc = model.predict(future).set_index('ds')['yhat'][-n_periods:]
+    fc.name = series.name
+    return fc, model
 
-    # Fazer a previsão
-    forecast = model.predict(future)
-
-    # Extrair as previsões futuras
-    forecast_series = forecast.set_index('ds')['yhat'][-n_periods:]
-    forecast_series.name = series.name
-
-    return forecast_series, model
 
 def random_forest(series, n_periods=12):
-    """
-    Metodo de previsao machine learning: Random Forest Regressor.
-
-    Parametros:
-    - series (pd.Series): Série temporal univariada.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo Random Forest ajustado.
-    """
     df_train = series.reset_index()
     df_train.columns = ['ds', 'y']
-    df_train.dropna()
-
-    df_features = create_features(df_train, lag_start=1, lag_end=12, rolling_window=6)
-    df_features = df_features.dropna(subset=['y'])
-
-    X_cols = [col for col in df_features.columns if col not in ['ds', 'y']]
-    X_train = df_features[X_cols]
-    y_train = df_features['y']
-
+    df_features = create_features(df_train, lag_start=1, lag_end=12, rolling_window=6).dropna(subset=['y'])
+    X_cols = [c for c in df_features.columns if c not in ['ds', 'y']]
     model = RandomForestRegressor(n_estimators=100, random_state=25, n_jobs=-1)
-    model.fit(X_train, y_train)
+    model.fit(df_features[X_cols], df_features['y'])
 
     last_date = series.index[-1]
-
-    # Cria as datas futuras
     future_dates = pd.date_range(start=last_date, periods=n_periods + 1)[1:]
-    df_future = pd.DataFrame({'ds': future_dates})
-
-    # Inicializa 'y' e concatena para gerar FEATURES DE FORMA ITERATIVA
-    df_full = pd.concat([df_train, df_future], ignore_index=True)
+    df_full = pd.concat([df_train, pd.DataFrame({'ds': future_dates})], ignore_index=True)
     df_full['ds'] = pd.to_datetime(df_full['ds'])
 
     predictions = []
-    start_idx = len(df_train)
-    for i in range(start_idx, len(df_full)):
-        # Gera features para toda a série (treino + previsão)
+    for i in range(len(df_train), len(df_full)):
         df_iter = create_features(df_full[:i], lag_end=12, rolling_window=6)
-
-        # Seleciona a linha mais recente (o ponto a ser previsto)
-        X_predict = df_iter.iloc[-1][X_cols].to_frame().T
-
-        # Faz a previsão do próximo passo
-        next_pred = model.predict(X_predict)[0]
+        X_pred = df_iter.iloc[-1][X_cols].to_frame().T
+        next_pred = model.predict(X_pred)[0]
         predictions.append(next_pred)
-
-        # Atualiza df_full com a previsão para usá-la como input (lag) na próxima iteração
         df_full.loc[i, 'y'] = next_pred
 
-        # 6. Formatação do Resultado
-    forecast_series = pd.Series(predictions, index=future_dates, name='Previsão RF')
-    forecast_series.index.name = 'Date'
+    return pd.Series(predictions, index=future_dates, name='RF'), model
 
-    return forecast_series, model
 
 def lstm_forecast(series, n_periods=12):
-    """
-    Metodo de previsao machine learning: LSTM.
-
-    Parametros:
-    - series (pd.Series): Série temporal univariada.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo LSTM ajustado.
-    """
-
     if len(series.dropna()) < n_periods + 2:
-        return pd.Series(dtype='float64'), None  # Não há dados suficientes para sequências
-
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(series.values.reshape(-1, 1))
-    X, y = series_to_sequences(scaled_data.flatten(), n_periods)
-
+        return pd.Series(dtype='float64'), None
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(series.values.reshape(-1, 1)).flatten()
+    X, y = series_to_sequences(scaled, n_periods)
     if X.shape[0] == 0:
         return pd.Series(dtype='float64'), None
 
-    # Reshape input para ser [samples, time steps, features]
-    n_features = 1
-    X = X.reshape((X.shape[0], X.shape[1], n_features))
+    # [samples, seq_len, features=1]
+    X_t = torch.FloatTensor(X).unsqueeze(2)
+    y_t = torch.FloatTensor(y)
 
-    X = torch.from_numpy(X).float().unsqueeze(2)
-    y = torch.from_numpy(y).float()
+    model = LSTMModel()
+    model = _train_batch(model, X_t, y_t, epochs=25)
 
-    model = LSTMModel(input_size=1, hidden_layer_size=50, output_size=1)
-    loss_function = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    model.eval()
+    cur = scaled[-n_periods:].copy()
+    preds = []
+    with torch.no_grad():
+        for _ in range(n_periods):
+            inp = torch.FloatTensor(cur).unsqueeze(0).unsqueeze(2)  # [1, seq, 1]
+            p = model(inp).item()
+            preds.append(p)
+            cur = np.roll(cur, -1)
+            cur[-1] = p
 
-    for i in range(25):  # Usando 25 épocas para velocidade no loop
-        for seq, labels in zip(X, y):
-            optimizer.zero_grad()
-            model.hidden_cell = (torch.zeros(1, 1, model.hidden_layer_size),
-                                 torch.zeros(1, 1, model.hidden_layer_size))
-
-            y_pred = model(seq)
-
-            single_loss = loss_function(y_pred, labels)
-            single_loss.backward()
-            optimizer.step()
-
-    predictions = []
-    # Sequência de entrada atual (últimos n_steps do treino)
-    current_input = scaled_data[-n_periods:].flatten()
-
-    for _ in range(n_periods):
-        # Prever o próximo passo
-        seq = torch.from_numpy(current_input).float()
-        model.hidden_cell = (torch.zeros(1, 1, model.hidden_layer_size),
-                             torch.zeros(1, 1, model.hidden_layer_size))
-
-        with torch.no_grad():
-            next_pred_scaled = model(seq).item()
-
-        predictions.append(next_pred_scaled)
-
-        # Atualizar o input (retira o primeiro valor e anexa a previsão)
-        current_input = np.roll(current_input, -1)
-        current_input[-1] = next_pred_scaled
-
-    # 6. Escala Inversa (Converter de volta para os valores monetários originais)
-    predictions = np.array(predictions).reshape(-1, 1)
-    predictions = scaler.inverse_transform(predictions).flatten()
-
-    # 7. Criar índice futuro
-    last_date = series.index[-1]
-    freq_inferida = 'MS'
-    future_dates = pd.date_range(start=last_date, periods=n_periods + 1, freq=freq_inferida)[1:]
-
-    forecast_series = pd.Series(predictions, index=future_dates, name='Previsão LSTM')
-    forecast_series.index.name = 'Date'  # Garantindo o nome do índice
-
-    return forecast_series, model
+    preds = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).flatten()
+    idx = pd.date_range(start=series.index[-1], periods=n_periods + 1, freq='MS')[1:]
+    return pd.Series(preds, index=idx, name='LSTM'), model
 
 
 def gru_forecast(series, n_periods=12):
-    """
-    Metodo de previsao machine learning: GRU.
-
-    Parametros:
-    - series (pd.Series): Série temporal univariada.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo GRU ajustado.
-    """
     if len(series.dropna()) < n_periods + 2:
         return pd.Series(dtype='float64'), None
-
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(series.values.reshape(-1, 1))
-
-    X, y = series_to_sequences(scaled_data.flatten(), n_periods)
-
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(series.values.reshape(-1, 1)).flatten()
+    X, y = series_to_sequences(scaled, n_periods)
     if X.shape[0] == 0:
-        print("Dados insuficientes para criar sequências GRU.")
         return pd.Series(dtype='float64'), None
 
-    X_train = torch.from_numpy(X).float()
-    y_train = torch.from_numpy(y).float()
+    X_t = torch.FloatTensor(X).unsqueeze(2)
+    y_t = torch.FloatTensor(y)
 
-    model = GRUmodel(input_size=1, hidden_layer_size=50, output_size=1)
-    loss_function = nn.MSELoss()
-    # learning rate do modelo é passada aqui
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    model.train()
-    for epoch in range(25):
-        # Re-inicializa o hidden state no início de cada época (boas práticas)
-        model.hidden_cell = torch.zeros(1, 1, model.hidden_layer_size)
-
-        for i in range(len(X_train)):
-            optimizer.zero_grad()
-
-            # Input para forward deve ser [seq_len, batch_size, input_size]
-            input_seq = X_train[i].view(n_periods, 1, 1)
-
-            # CRUCIAL: Detach para quebrar o histórico de gradientes da sequência anterior
-            # Isso impede o RuntimeError: Trying to backward through the graph a second time.
-            model.hidden_cell = model.hidden_cell.detach()
-
-            y_pred = model(input_seq)
-
-            loss = loss_function(y_pred, y_train[i].unsqueeze(0))
-            loss.backward()
-            optimizer.step()
+    model = GRUmodel()
+    model = _train_batch(model, X_t, y_t, epochs=25)
 
     model.eval()
-    predictions = []
-    current_input_cpu = scaled_data[-n_periods:].flatten()
-    current_input = torch.from_numpy(current_input_cpu).float()  #
+    cur = scaled[-n_periods:].copy()
+    preds = []
     with torch.no_grad():
         for _ in range(n_periods):
-            # Desanexar o hidden cell para que o loop de previsão use apenas o estado
-            # sem tentar acumular mais histórico de gradientes.
-            model.hidden_cell = model.hidden_cell.detach()
+            inp = torch.FloatTensor(cur).unsqueeze(0).unsqueeze(2)
+            p = model(inp).item()
+            preds.append(p)
+            cur = np.roll(cur, -1)
+            cur[-1] = p
 
-            # Prever o próximo passo
-            input_seq = current_input.view(n_periods, 1, 1)
-
-            next_pred_scaled = model(input_seq).item()
-            predictions.append(next_pred_scaled)
-
-            # Atualizar o input (retira o primeiro valor e anexa a previsão)
-            new_input = np.append(current_input_cpu[1:], next_pred_scaled)
-            current_input_cpu = new_input
-            current_input = torch.from_numpy(new_input).float()  # Sem .to(device)
-
-    predictions = np.array(predictions).reshape(-1, 1)
-    predictions = scaler.inverse_transform(predictions).flatten()
-
-    last_date = series.index[-1]
-    freq_inferida = 'MS'
-    future_dates = pd.date_range(start=last_date, periods=n_periods + 1, freq=freq_inferida)[1:]
-
-    forecast_series = pd.Series(predictions, index=future_dates, name=f'Previsão GRU')
-    forecast_series.index.name = 'Date'  # Garantindo o nome do índice
-
-    return forecast_series, model
-
-def transformer_forecast(series, n_periods=12):
-    """
-    Metodo de previsao machine learning: Transformer.
-
-    Parametros:
-    - series (pd.Series): Série temporal univariada.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo Transformer ajustado.
-    """
-
-    #Parametros
-    input_dim = 1
-    d_model = 128
-    nhead = 8
-    num_layers = 3
-    n_epochs = 150
-
-    if len(series.dropna()) < n_periods + 2:
-        return pd.Series(dtype='float64'), None
-
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(series.values.reshape(-1, 1))
-
-    X, y = series_to_sequences(scaled_data.flatten(), n_periods)
-
-    X_train = torch.from_numpy(X).float()
-    y_train = torch.from_numpy(y).float()
-
-    X_train_transpose = X_train.transpose(0,1).unsqueeze(2)
-
-    model = TimeSeriesTransformer(input_dim, d_model, nhead, num_layers, dropout=0.3)
-    loss_function = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    model.train()
-    for epoch in range(n_epochs):
-        optimizer.zero_grad()
-
-        y_pred = model(X_train_transpose)
-        loss = loss_function(y_pred, y_train)
-
-        loss.backward()
-        optimizer.step()
-
-    model.eval()
-    predictions = []
-    current_input_cpu = scaled_data[-n_periods:].flatten()
-
-    with torch.no_grad():
-        for _ in range(n_periods):
-            input_seq = torch.from_numpy(current_input_cpu).float().view(n_periods, 1, 1)
-
-            next_pred_scaled = model(input_seq).item()
-            predictions.append(next_pred_scaled)
-
-            np.roll(current_input_cpu, -1)
-            current_input_cpu[-1] = next_pred_scaled
-
-    predictions = np.array(predictions).reshape(-1, 1)
-    predictions = scaler.inverse_transform(predictions).flatten()
-
-    last_date = series.index[-1]
-    freq_inferida = 'MS'
-    future_dates = pd.date_range(start=last_date, periods=n_periods + 1, freq=freq_inferida)[1:]
-
-    forecast_series = pd.Series(predictions, index=future_dates, name='Previsão Transformer')
-    forecast_series.index.name = 'Date'
-    return forecast_series, model
+    preds = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).flatten()
+    idx = pd.date_range(start=series.index[-1], periods=n_periods + 1, freq='MS')[1:]
+    return pd.Series(preds, index=idx, name='GRU'), model
 
 
 def conv_transformer_forecast(series, n_periods=12):
-    """
-    Método de previsão baseado na arquitetura Transformer com Embedding Convolucional.
-
-    Parámetros:
-    - series (pd.Series): Série temporal univariada.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - forecast (pd.Series): Série contendo as previsões futuras.
-    - model: O modelo Transformer ajustado.
-    """
-    # Parâmetros otimizados para estabilidade e capacidade
-    INPUT_DIM = 1
-    D_MODEL = 128
-    NHEAD = 8
-    NUM_LAYERS = 3
-    N_EPOCHS = 200
-    LEARNING_RATE = 0.0005
-    MAX_NORM = 1.0
-
-    # 1. Validação de Dados
     if len(series.dropna()) < n_periods + 1:
         return pd.Series(dtype='float64'), None
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(series.values.reshape(-1, 1)).flatten()
+    X, y = series_to_sequences(scaled, n_periods)
 
-    # 2. Pré-processamento e Sequenciamento
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(series.values.reshape(-1, 1))
+    # shape for transformer: [seq_len, batch, 1]
+    X_t = torch.FloatTensor(X).transpose(0, 1).unsqueeze(2)  # [seq, samples, 1]
+    y_t = torch.FloatTensor(y)
 
-    # X: [samples, seq_len], y: [samples]
-    X, y = series_to_sequences(scaled_data.flatten(), n_periods)
+    model = TimeSeriesTransformer(input_dim=1, d_model=128, nhead=8, num_layers=3, dropout=0.1)
+    model = _train_batch(model, X_t, y_t, epochs=200, lr=0.0005)
 
-    X_train = torch.from_numpy(X).float()
-    y_train = torch.from_numpy(y).float()
-
-    # Redimensiona X_train para [seq_len, samples, input_dim] para o Transformer
-    X_train_transposed = X_train.transpose(0, 1).unsqueeze(2)
-
-    # 3. Inicialização do Modelo (USANDO EMBEDDING CONVOLUCIONAL)
-    model = TimeSeriesTransformer(
-        input_dim=INPUT_DIM,
-        d_model=D_MODEL,
-        nhead=NHEAD,
-        num_layers=NUM_LAYERS,
-        dropout=0.1
-    )
-    loss_function = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-    # 4. Treinamento
-    model.train()
-    for epoch in range(N_EPOCHS):
-        optimizer.zero_grad()
-
-        y_pred = model(X_train_transposed)
-        loss = loss_function(y_pred, y_train)
-
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), MAX_NORM)
-
-        optimizer.step()
-
-    # 5. Previsão Iterativa (Walk-Forward)
     model.eval()
-    predictions = []
-    current_input_cpu = scaled_data[-n_periods:].flatten()  # Última sequência de treino
-
+    cur = scaled[-n_periods:].copy()
+    preds = []
     with torch.no_grad():
         for _ in range(n_periods):
-            # Prepara a sequência de input para o Transformer
-            # [seq_len] -> [seq_len, 1, 1]
-            input_seq = torch.from_numpy(current_input_cpu).float().view(n_periods, 1, 1)
-
-            # Preve o próximo passo
-            next_pred_scaled = model(input_seq).item()
-            predictions.append(next_pred_scaled)
-
-            # Atualiza o input (desliza a janela e adiciona a previsão)
-            current_input_cpu = np.roll(current_input_cpu, -1)
-            current_input_cpu[-1] = next_pred_scaled
-
-    predictions = np.array(predictions).reshape(-1, 1)
-    predictions = scaler.inverse_transform(predictions).flatten()
-
-
-    last_date = series.index[-1]
-    freq_inferida = 'MS'
-    future_dates = pd.date_range(start=last_date, periods=n_periods + 1, freq=freq_inferida)[1:]
-
-    forecast_series = pd.Series(predictions, index=future_dates, name='Previsão Conv-Transformer')
-    forecast_series.index.name = 'Date'
-
-    return forecast_series, model
-
-
-def generate_forecast_chart(serie_historica: pd.Series, serie_previsoes: pd.Series, nome_produto: str, uf: str, model_name: str, rmse):
-    """
-    Cria um DataFrame longo combinando histórico e previsão e gera um gráfico Plotly interativo.
-
-    Parâmetros:
-    - serie_historica (pd.Series): Série temporal histórica.
-    - serie_previsoes (pd.Series): Série temporal de previsões.
-    - nome_produto (str): Nome do produto para o título.
-    - uf (str): Unidade Federativa (Estado) para o título.
-    - model_name (str): Nome do modelo utilizado para previsão.
-    - rmse (float): Valor do RMSE para exibir no título.
-
-    Retorna:
-    - fig: Objeto Plotly figure representando o gráfico de linha.
-
-    """
-
-    # 1. PREPARAÇÃO DO DATAFRAME LONGO
-
-    # Adicionar coluna 'Tipo' para distinguir as séries
-    df_historico = serie_historica.reset_index()
-    df_historico.columns = ['Date', 'Value']
-    df_historico['Tipo'] = 'Histórico'
-
-    df_previsao = serie_previsoes.reset_index()
-    df_previsao.columns = ['Date', 'Value']
-    df_previsao['Tipo'] = 'Previsão'
-
-    # Concatenar: O resultado está no formato longo pronto para o Plotly
-    df_longo_final = pd.concat([df_historico, df_previsao], ignore_index=True)
-
-    # Usar string para 'Date' (conforme seu código original, mas Plotly trata bem datetime também)
-    df_longo_final['Date'] = df_longo_final['Date'].astype(str)
-
-    # 2. CRIAR O GRÁFICO DE LINHA INTERATIVO
-
-    cores = {'Histórico': 'blue', 'Previsão': 'red'}
-
-    fig = px.line(
-        df_longo_final,
-        x='Date',
-        y='Value',
-        color='Tipo',  # Cor diferente para 'Histórico' e 'Previsão'
-        color_discrete_map=cores,
-        title=f"Previsão da Série do Estado {uf}: {nome_produto} usando o modelo: {model_name} (RMSE: {rmse:.2f}) ",
-        labels={'Date': 'Data', 'Value': "Preço", 'Tipo': 'Série'}
-    )
-
-    # 3. CUSTOMIZAÇÕES
-
-    # Linha tracejada para a previsão
-    fig.update_traces(
-        line=dict(dash='dash', width=3),
-        selector=dict(name='Previsão')
-    )
-
-    # Customizações do seu código original
-    fig.update_xaxes(
-        rangeslider=dict(visible=True),
-        type="date"
-    )
-
-    fig.update_layout(
-        title_x=0.5,
-        title_font_size=20,
-        legend_title="Tipo de Série"
-    )
-
-    return fig
-
-def error_comparison_table(df: pd.DataFrame, test_periods: int, n_periods: int):
-    """
-    Calcula o RSME das funcoes de previsao (ARIMA, ETS, PROPHET) e gera uma tabela comparativa.
-
-    Parametros:
-    - df (pd.DataFrame): DataFrame contendo as séries temporais para análise.
-    - test_periods (int): Número de períodos a serem usados para teste/validação.
-    - n_periods (int): Número de períodos futuros a serem previstos.
-
-    Retorna:
-    - Arquivo .xlsx para comparação dos modelos.
-    - pd.DataFrame: DataFrame contendo os valores de RSME para cada modelo e série temporal.
-    """
-    results = {}
-    states = df.columns.tolist()
-    for state in states:
-        series = df[state]
-        series.name = state
-        if len(series.dropna()) <= test_periods:
-            print(f"AVISO: Série para {state} tem dados insuficientes. Pulando.")
-            continue
-
-        test_series = series[-test_periods:]
-        train_series = series[:-test_periods]
-        results[state] = {}
-
-        forecast_arima, _ = auto_arima_forecast(train_series, seasonal=True, m=12, n_periods=n_periods)
-        forecast_arima.index = test_series.index
-
-        forecast_ets, _ = ets_forecast(train_series, n_periods=n_periods, m=12, trend='add', seasonal_model='add')
-        forecast_ets.index = test_series.index
-
-
-        forecast_prophet, _ = prophet_forecast(train_series, n_periods=n_periods, m=12)
-        forecast_prophet.index = test_series.index
-
-        forecast_random_forest, _ = random_forest(train_series, n_periods=n_periods)
-        forecast_random_forest.index = test_series.index
-
-        forecast_lstm, _ = lstm_forecast(train_series, n_periods=n_periods)
-        forecast_lstm.index = test_series.index
-
-        forecast_gru, _ = gru_forecast(train_series, n_periods=n_periods)
-        forecast_gru.index = test_series.index
-
-        forecast_transformer, _ = conv_transformer_forecast(train_series, n_periods=n_periods)
-        forecast_transformer.index = test_series.index
-
-
-        results[state]['RMSE_ARIMA'] = calculate_rmse(test_series, forecast_arima)
-        results[state]['RMSE_ETS'] = calculate_rmse(test_series, forecast_ets)
-        results[state]['RMSE_PROPHET'] = calculate_rmse(test_series, forecast_prophet)
-        results[state]['RMSE_RANDOM_FOREST'] = calculate_rmse(test_series, forecast_random_forest)
-        results[state]['RMSE_LSTM'] = calculate_rmse(test_series, forecast_lstm)
-        results[state]['RMSE_GRU'] = calculate_rmse(test_series, forecast_gru)
-        results[state]['RMSE_TRANSFORMER'] = calculate_rmse(test_series, forecast_transformer)
-        # print("ARIMA ", forecast_arima)
-        # print("RF", forecast_random_forest)
-        # print("TEST", test_series)
-        # print("RMSE_RANDOM_FOREST:", calculate_rmse(test_series, forecast_random_forest))
-
-
-        results[state]['MAPE_ARIMA'] = calculate_mape(test_series, forecast_arima)
-        results[state]['MAPE_ETS'] = calculate_mape(test_series, forecast_ets)
-        results[state]['MAPE_PROPHET'] = calculate_mape(test_series, forecast_prophet)
-        results[state]['MAPE_RANDOM_FOREST'] = calculate_mape(test_series, forecast_random_forest)
-        results[state]['MAPE_LSTM'] = calculate_mape(test_series, forecast_lstm)
-        results[state]['MAPE_GRU'] = calculate_mape(test_series, forecast_gru)
-        results[state]['MAPE_TRANSFORMER'] = calculate_mape(test_series, forecast_transformer)
-
-    df_rmse_table = pd.DataFrame(results).T
-    df_rmse_table.index.name = "UF"
-    return df_rmse_table
-
-def sliding_error_chart(series, model_func, model_name, test_periods=12, n_periods=12):
-    """
-        Calcula o RMSE Médio para cada passo (Horizonte 1, Horizonte 2, ..., Horizonte N)
-        usando a Validação Cruzada Deslizante (Walk-Forward).
-        """
-
-    # Lista para armazenar o erro ABSOLUTO (ou QUADRADO) de CADA PASSO em CADA JANELA
-    all_squared_errors = []
-
-    min_train_size = 20
-
-    # Range: O índice onde o conjunto de teste termina
-    start_index = len(series) + 1
-    stop_index= start_index - 12
-
-    for end_idx in range(start_index, stop_index, -1):
-        # O conjunto de teste é sempre o último 'test_periods'
-        test_series = series[end_idx - test_periods: end_idx]
-        # O conjunto de treino é tudo antes do conjunto de teste
-        train_series = series[: end_idx - test_periods]
-
-        try:
-            # 1. Faz a previsão
-            forecast, _ = model_func(train_series, n_periods=test_periods)
-
-            if len(test_series) != len(forecast):
-                continue
-
-            # 2. Alinha os índices para comparação ponto-a-ponto
-            aligned_forecast = pd.Series(forecast.values, index=test_series.index)
-
-            # 3. Calcula o Erro Quadrático (Squared Error) para CADA PASSO
-            squared_error = (test_series - aligned_forecast) ** 2
-            print("actual", test_series)
-            print("predicted", aligned_forecast)
-            # print("error", squared_error)
-
-            # Adiciona o array de 12 erros quadráticos (Passo 1 ao Passo 12) à lista
-            all_squared_errors.append(squared_error.values)
-
-        except Exception as e:
-            print(f"Erro no passo de validação ({end_idx}): {type(e).__name__}")
-            print(e)
-            continue
-
-    if not all_squared_errors:
-        return pd.Series(dtype='float64')
-
-    # 4. Agrega os resultados
-    # Converte a lista de arrays em uma matriz (n_windows x test_periods)
-    error_matrix = np.array(all_squared_errors)
-
-    # Calcula a média (mean) para CADA COLUNA (Horizonte) e depois a raiz quadrada (RMSE)
-
-    # print("matriz", error_matrix)
-    mean_squared_error_by_horizon = np.mean(error_matrix, axis=0)
-    # print("medias dos erros", mean_squared_error_by_horizon)
-    rmse_by_horizon = np.sqrt(mean_squared_error_by_horizon)
-
-    # 5. Formata a saída
-    horizonte_labels = [f"Passo {i + 1}" for i in range(test_periods)]
-    rmse_series = pd.Series(rmse_by_horizon, index=horizonte_labels, name=f'RMSE Médio - {model_name}')
-
-    return rmse_series
-
-def generate_sliding_chart(rmse_series: pd.Series, model_name: str, product_name: str, uf: str):
-    """
-    Gera um gráfico de barras Plotly para visualizar o RMSE médio em cada horizonte
-    de previsão (Passo 1, Passo 2, ..., Passo N).
-    """
-    if rmse_series.empty:
-        print("Série de RMSE vazia, não é possível gerar o gráfico.")
-        return px.scatter(title="Dados insuficientes para gerar o gráfico de erro deslizante.")
-
-    df_plot = rmse_series.reset_index()
-    df_plot.columns = ['Horizonte', 'RMSE']
-
-    # Ordenar pelo número do horizonte
-    try:
-        df_plot['Horizonte_Num'] = df_plot['Horizonte'].apply(lambda x: int(x.split(' ')[1]))
-        df_plot = df_plot.sort_values('Horizonte_Num')
-    except:
-        # Fallback se a formatação 'Horizonte N' falhar
-        pass
-
-    fig = px.line(
-        df_plot,
-        x='Horizonte',
-        y='RMSE',
-        title=f"RMSE Média por Passo de Previsão - Modelo: {model_name} - Produto: {product_name} - Estado: {uf}",
-        labels={'Horizonte': 'Horizonte de Previsão', 'RMSE': 'RMSE Médio'},
-        markers=True
-    )
-
-    # fig = px.bar(
-    #     df_plot,
-    #     x='Horizonte',
-    #     y='RMSE',
-    #     title=f"RMSE Médio por Passo de Previsão - Modelo: {model_name} - Produto: {product_name} - Estado: {uf}",
-    #     labels={'Horizonte': 'Horizonte de Previsão', 'RMSE': 'RMSE Médio'},
-    # )
-    fig.update_layout(
-        title_x=0.5,
-        title_font_size=20,
-        xaxis=dict(tickmode='linear')
-    )
-    # fig.update_traces(texttemplate='%{y:.2f}', textposition='outside')
-    # fig.update_yaxes(rangemode='tozero')
-
-    return fig
-
+            inp = torch.FloatTensor(cur).view(n_periods, 1, 1)
+            p = model(inp).item()
+            preds.append(p)
+            cur = np.roll(cur, -1)
+            cur[-1] = p
+
+    preds = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).flatten()
+    idx = pd.date_range(start=series.index[-1], periods=n_periods + 1, freq='MS')[1:]
+    return pd.Series(preds, index=idx, name='Transformer'), model
+
+
+# ---------------------------------------------------------------------------
+# Wrappers with consistent signature
+# ---------------------------------------------------------------------------
 
 def _model_forecast_arima(series, n_periods=12):
-    """Wrapper para auto_arima_forecast com parâmetros padrão."""
     return auto_arima_forecast(series, seasonal=True, m=12, n_periods=n_periods)
 
-
 def _model_forecast_ets(series, n_periods=12):
-    """Wrapper para ets_forecast com parâmetros padrão."""
     return ets_forecast(series, n_periods=n_periods, m=12, trend='add', seasonal_model='add')
 
-
 def _model_forecast_prophet(series, n_periods=12):
-    """Wrapper para prophet_forecast com parâmetros padrão."""
     return prophet_forecast(series, seasonal=True, m=12, n_periods=n_periods)
 
 
-def sliding_rmse_boxplots(
-    df,
-    product_name="",
-    test_periods=12,
-    n_periods=12,
-    min_train_size=36,
-    max_windows=12,
-    output_path=None,
+MODEL_FUNCS = {
+    "ARIMA":         _model_forecast_arima,
+    "ETS":           _model_forecast_ets,
+    "Prophet":       _model_forecast_prophet,
+    "Random Forest": random_forest,
+    "LSTM":          lstm_forecast,
+    "GRU":           gru_forecast,
+    "Transformer":   conv_transformer_forecast,
+}
+
+
+# ---------------------------------------------------------------------------
+# Disk-cached single window computation (top-level so it's picklable)
+# ---------------------------------------------------------------------------
+
+def _compute_window_errors(
+    state: str,
+    train_values: np.ndarray,
+    train_index,
+    test_values: np.ndarray,
+    test_index,
+    test_periods: int,
+    cache_dir: str,
 ):
     """
-    Calcula o erro (actual - predicted) para cada passo da previsão em validação deslizante
-    (walk-forward) para todos os modelos e estados, e gera 12 boxplots (um por passo).
+    Runs all models for one (state, window) pair and returns per-step RMSE.
 
-    Em cada gráfico há 7 boxplots (um por modelo), onde cada boxplot mostra a distribuição
-    dos erros de previsão naquele passo específico, agregando todos os estados e janelas
-    deslizantes.
+    For each model we produce one RMSE scalar per forecast step:
+        rmse_at_step_k = sqrt( (actual_k - predicted_k)^2 )
+                       = |actual_k - predicted_k|
+    Because there is only one observation per step per window, the RMSE at
+    step k equals the absolute error at that step. Aggregating many windows
+    gives a distribution of RMSE values per step per model — what the
+    boxplots show.
 
-    Parâmetros:
-    - df (pd.DataFrame): DataFrame com Datas como índice e Estados (UFs) como colunas.
-    - product_name (str): Nome do produto para os títulos dos gráficos.
-    - test_periods (int): Número de períodos de teste por janela (horizonte de previsão).
-    - n_periods (int): Mesmo que test_periods, usado na chamada dos modelos.
-    - min_train_size (int): Tamanho mínimo da série de treino para cada janela.
-    - max_windows (int): Número máximo de janelas deslizantes por estado (padrão 12).
-    - output_path (str, opcional): Caminho base para salvar os HTMLs (ex: 'sliding_rmse_step').
-                                   Se None, não salva arquivos.
+    Results are cached to disk — re-runs skip already-computed windows.
 
-    Retorna:
-    - list: Lista de até 12 figuras Plotly, uma para cada passo de previsão.
+    Returns
+    -------
+    dict : model_name -> list of length test_periods
+           each element is the RMSE (= |error|) at that forecast step
     """
-    MODEL_FUNCS = {
-        "ARIMA": _model_forecast_arima,
-        "ETS": _model_forecast_ets,
-        "Prophet": _model_forecast_prophet,
-        "Random Forest": random_forest,
-        "LSTM": lstm_forecast,
-        "GRU": gru_forecast,
-        "Transformer": conv_transformer_forecast,
-    }
+    key_data  = np.concatenate([train_values, test_values])
+    key_bytes = f"{state}_{key_data.tobytes()}_{test_periods}".encode()
+    cache_key = hashlib.md5(key_bytes).hexdigest()
+    cache_path = os.path.join(cache_dir, f"{cache_key}.pkl")
 
-    # Estrutura: errors_by_step[step_idx][model_name] = lista de erros (todos os estados e janelas)
-    errors_by_step = {step: {m: [] for m in MODEL_FUNCS} for step in range(test_periods)}
-    states = df.columns.tolist()
+    if os.path.exists(cache_path):
+        with open(cache_path, 'rb') as f:
+            return pickle.load(f)
 
-    for state in states:
+    train_series = pd.Series(train_values, index=train_index)
+    test_series  = pd.Series(test_values,  index=test_index)
+
+    rmse_this_window = {}
+    for model_name, model_func in MODEL_FUNCS.items():
+        try:
+            forecast, _ = model_func(train_series, n_periods=test_periods)
+            if forecast is None or len(forecast) != len(test_series):
+                continue
+            aligned = pd.Series(forecast.values, index=test_series.index)
+            # Store absolute error per step — caller aggregates with sqrt(mean(sq))
+            per_step_abs = np.abs(test_series.values - aligned.values).tolist()
+            rmse_this_window[model_name] = per_step_abs
+        except Exception:
+            pass
+
+    with open(cache_path, 'wb') as f:
+        pickle.dump(rmse_this_window, f)
+
+    return rmse_this_window
+
+
+def _worker(args):
+    """Unpacks args for ProcessPoolExecutor — must be top-level."""
+    return _compute_window_errors(*args)
+
+
+# ---------------------------------------------------------------------------
+# Main optimized function
+# ---------------------------------------------------------------------------
+
+def sliding_rmse_excel(
+    df: pd.DataFrame,
+    product_name: str = "",
+    test_periods: int = 12,
+    min_train_size: int = 36,
+    max_windows: int = 12,
+    output_xlsx: str = "sliding_rmse.xlsx",
+    cache_dir: str = ".boxplot_cache",
+    n_jobs: int = -1,
+) -> pd.DataFrame:
+    """
+    Walk-forward RMSE export for all models, steps, and states.
+
+    For every (state, sliding-window) pair and every model, computes the
+    absolute error at each of the test_periods forecast steps:
+
+        rmse_step_k = |actual_k - predicted_k|
+
+    Results are written to an Excel file with one sheet per state. Each
+    sheet has rows = windows and a MultiIndex column of (model, step).
+
+    Additionally returns a summary sheet with the mean RMSE per
+    (state, model, step) aggregated across all windows.
+
+    Excel structure
+    ---------------
+    Sheet "Summary":
+        Rows    = states (UF)
+        Columns = MultiIndex (Model, Step 1 ... Step N)
+        Values  = mean RMSE across all windows for that state/model/step
+
+    Sheet per state (e.g. "SP", "MS", ...):
+        Rows    = one per sliding window (labelled by the last training date)
+        Columns = MultiIndex (Model, Step 1 ... Step N)
+        Values  = per-window per-step RMSE
+
+    Parameters
+    ----------
+    df            : DataFrame with DatetimeIndex, one column per state/UF.
+    product_name  : Used only in the log messages.
+    test_periods  : Forecast horizon (number of steps per window).
+    min_train_size: Minimum training observations required per window.
+    max_windows   : Maximum sliding windows evaluated per state.
+    output_xlsx   : Output path for the Excel file.
+    cache_dir     : Directory where per-window cache files are stored.
+    n_jobs        : Parallel worker processes (-1 = all CPU cores).
+
+    Returns
+    -------
+    summary_df : DataFrame with mean RMSE per (state, model, step).
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+
+    if n_jobs == -1:
+        import multiprocessing
+        n_jobs = multiprocessing.cpu_count()
+
+    logger.info(
+        f"sliding_rmse_excel | product={product_name!r} "
+        f"| states={len(df.columns)} | max_windows={max_windows} | n_jobs={n_jobs}"
+    )
+
+    # ------------------------------------------------------------------
+    # 1. Build jobs list
+    # ------------------------------------------------------------------
+    # Each job also carries the label for the window (last training date)
+    # so we can use it as the row index in the per-state sheet.
+    jobs = []          # (state, train_vals, train_idx, test_vals, test_idx, periods, cache)
+    job_meta = []      # (state, window_label) — same order as jobs
+
+    for state in df.columns:
         series = df[state].dropna()
         if len(series) < min_train_size + test_periods:
+            logger.warning(f"Skipping {state}: only {len(series)} observations.")
             continue
 
-        # Janelas: end_idx indica o fim do conjunto de teste; fazemos no máximo max_windows janelas
         start_end = len(series)
-        stop_end = max(min_train_size + test_periods - 1, start_end - max_windows)
+        stop_end  = max(min_train_size + test_periods - 1, start_end - max_windows)
 
         for end_idx in range(start_end, stop_end, -1):
             if end_idx - test_periods < min_train_size:
                 break
+            train_s = series.iloc[:end_idx - test_periods]
+            test_s  = series.iloc[end_idx - test_periods:end_idx]
+            last_idx = train_s.index[-1]
+            try:
+                window_label = str(pd.Timestamp(last_idx).date())  # e.g. "2022-12-01"
+            except Exception:
+                window_label = str(last_idx)
+            jobs.append((
+                state,
+                train_s.values,
+                train_s.index,
+                test_s.values,
+                test_s.index,
+                test_periods,
+                cache_dir,
+            ))
+            job_meta.append((state, window_label))
 
-            test_series = series.iloc[end_idx - test_periods : end_idx]
-            train_series = series.iloc[: end_idx - test_periods]
+    logger.info(f"Total jobs: {len(jobs)}")
 
-            for model_name, model_func in MODEL_FUNCS.items():
-                try:
-                    forecast, _ = model_func(train_series, n_periods=test_periods)
-                    if forecast is None or len(forecast) != len(test_series):
-                        continue
+    # ------------------------------------------------------------------
+    # 2. Run in parallel
+    # ------------------------------------------------------------------
+    # raw_results[(state, window_label)] = {model: [rmse_step0, ..., rmse_stepN-1]}
+    raw_results: dict = {}
 
-                    aligned_forecast = pd.Series(forecast.values, index=test_series.index)
-                    errors = test_series.values - aligned_forecast.values
+    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        futures = {executor.submit(_worker, job): idx for idx, job in enumerate(jobs)}
+        for future in tqdm(as_completed(futures), total=len(futures),
+                           desc="Computing windows", unit="window"):
+            idx = futures[future]
+            state, window_label = job_meta[idx]
+            try:
+                result = future.result()   # {model: [rmse_step0, ...]}
+                raw_results[(state, window_label)] = result
+            except Exception as exc:
+                logger.error(f"Window ({state}, {window_label}) failed: {exc}")
 
-                    for step in range(test_periods):
-                        if step < len(errors):
-                            errors_by_step[step][model_name].append(errors[step])
-                except Exception as e:
-                    continue
+    # ------------------------------------------------------------------
+    # 3. Assemble per-state DataFrames and summary
+    # ------------------------------------------------------------------
+    model_names = list(MODEL_FUNCS.keys())
+    step_labels = [f"Step {k + 1}" for k in range(test_periods)]
 
-    # Gerar 12 figuras (uma por passo)
-    figures = []
-    for step in range(test_periods):
-        # Preparar dados em formato longo para Plotly
-        rows = []
-        for model_name in MODEL_FUNCS:
-            errs = errors_by_step[step][model_name]
-            for e in errs:
-                rows.append({"Model": model_name, "Erro": e})
+    # MultiIndex columns: (model, step)
+    col_tuples = [(m, s) for m in model_names for s in step_labels]
+    col_index  = pd.MultiIndex.from_tuples(col_tuples, names=["Model", "Step"])
 
-        if not rows:
+    # Group results by state
+    state_groups: dict[str, dict] = {}   # state -> {window_label: {model: [rmses]}}
+    for (state, window_label), result in raw_results.items():
+        state_groups.setdefault(state, {})[window_label] = result
+
+    per_state_dfs: dict[str, pd.DataFrame] = {}
+    for state, windows in state_groups.items():
+        rows = {}
+        for window_label, model_rmses in windows.items():
+            row = {}
+            for model in model_names:
+                rmses = model_rmses.get(model, [np.nan] * test_periods)
+                for k, step_label in enumerate(step_labels):
+                    row[(model, step_label)] = rmses[k] if k < len(rmses) else np.nan
+            rows[window_label] = row
+        per_state_dfs[state] = pd.DataFrame(rows).T
+        per_state_dfs[state].index.name = "Window (last train date)"
+        per_state_dfs[state].columns = pd.MultiIndex.from_tuples(
+            per_state_dfs[state].columns, names=["Model", "Step"]
+        )
+
+    # Summary: mean RMSE per (state, model, step) across windows
+    summary_rows = {}
+    for state, df_state in per_state_dfs.items():
+        summary_rows[state] = df_state.mean(axis=0)   # Series with MultiIndex
+
+    summary_df = pd.DataFrame(summary_rows).T
+    summary_df.index.name = "State"
+
+    # ------------------------------------------------------------------
+    # 4. Write Excel
+    # ------------------------------------------------------------------
+    with pd.ExcelWriter(output_xlsx, engine="openpyxl") as writer:
+        summary_df.to_excel(writer, sheet_name="Summary")
+        for state, df_state in per_state_dfs.items():
+            # Sheet names max 31 chars; state names are short UF codes
+            df_state.to_excel(writer, sheet_name=str(state)[:31])
+
+    logger.info(f"Saved Excel -> {output_xlsx}  ({len(per_state_dfs)} state sheets + Summary)")
+    return summary_df
+
+
+
+def sliding_rmse_boxplots(
+    df: pd.DataFrame,
+    product_name: str = "",
+    test_periods: int = 12,
+    min_train_size: int = 36,
+    max_windows: int = 12,
+    output_html: str = "sliding_rmse_boxplots.html",
+    cache_dir: str = ".boxplot_cache",
+    n_jobs: int = -1,
+    steps_per_row: int = 4,
+):
+    """
+    Walk-forward RMSE boxplots for all models across all states.
+
+    Layout
+    ------
+    3 rows (subplots), each row contains one grouped chart with `steps_per_row`
+    forecast steps on the x-axis. Within each step, 7 side-by-side boxes are
+    shown — one per model — color-coded via a shared legend. No model name is
+    printed under the boxes; the legend at the top identifies the colors.
+
+    What each box shows
+    -------------------
+    Each data point is the per-step RMSE for one (state, window) pair:
+        rmse_step_k = |actual_k - predicted_k|
+    The box shows the distribution of these values across all windows and
+    states: median, IQR, whiskers, and outliers.
+
+    Parameters
+    ----------
+    df            : DataFrame with DatetimeIndex, one column per state/UF.
+    product_name  : Label shown in the chart title.
+    test_periods  : Total forecast horizon (default 12 → 3 rows of 4 steps).
+    min_train_size: Minimum training observations required per window.
+    max_windows   : Maximum sliding windows evaluated per state.
+    output_html   : Output path for the single HTML file.
+    cache_dir     : Directory where per-window cache files are stored.
+    n_jobs        : Parallel worker processes (-1 = all CPU cores).
+    steps_per_row : How many forecast steps appear on each row (default 4).
+
+    Returns
+    -------
+    fig : Plotly Figure.
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+
+    if n_jobs == -1:
+        import multiprocessing
+        n_jobs = multiprocessing.cpu_count()
+
+    logger.info(
+        f"sliding_rmse_boxplots | product={product_name!r} "
+        f"| states={len(df.columns)} | max_windows={max_windows} | n_jobs={n_jobs}"
+    )
+
+    # ------------------------------------------------------------------
+    # 1. Build jobs
+    # ------------------------------------------------------------------
+    jobs      = []
+    job_meta  = []
+
+    for state in df.columns:
+        series = df[state].dropna()
+        if len(series) < min_train_size + test_periods:
+            logger.warning(f"Skipping {state}: only {len(series)} observations.")
             continue
 
-        df_plot = pd.DataFrame(rows)
+        start_end = len(series)
+        stop_end  = max(min_train_size + test_periods - 1, start_end - max_windows)
 
-        fig = go.Figure()
-        for model_name in MODEL_FUNCS:
-            vals = df_plot[df_plot["Model"] == model_name]["Erro"].values
-            if len(vals) > 0:
-                fig.add_trace(
-                    go.Box(
-                        x=[model_name] * len(vals),
-                        y=vals,
-                        name=model_name,
-                        boxpoints="outliers",
-                        jitter=0.3,
-                        pointpos=-1.8,
-                    )
-                )
+        for end_idx in range(start_end, stop_end, -1):
+            if end_idx - test_periods < min_train_size:
+                break
+            train_s = series.iloc[:end_idx - test_periods]
+            test_s  = series.iloc[end_idx - test_periods:end_idx]
+            jobs.append((
+                state,
+                train_s.values,
+                train_s.index,
+                test_s.values,
+                test_s.index,
+                test_periods,
+                cache_dir,
+            ))
+            job_meta.append(state)
 
-        fig.update_layout(
-            title=f"Passo {step + 1} - Distribuição do Erro de Previsão por Modelo"
-            + (f" ({product_name})" if product_name else ""),
-            title_x=0.5,
-            xaxis_title="Modelo",
-            yaxis_title="Erro (Real - Previsto)",
-            template="plotly_white",
-            height=500,
-            width=900,
-            showlegend=False,
+    logger.info(f"Total jobs: {len(jobs)}")
+
+    # ------------------------------------------------------------------
+    # 2. Run in parallel (cache hits are instant)
+    # ------------------------------------------------------------------
+    # Accumulate squared errors per (state, model, step) across windows.
+    # sq_errors_by_state[state][model][step] = [se_w1, se_w2, ...]
+    # After all windows are done we compute:
+    #   RMSE_state_model_step = sqrt( mean(squared_errors across windows) )
+    # giving one scalar per state — 26 scalars per (model, step) box.
+    sq_errors_by_state = {}
+
+    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        futures = {executor.submit(_worker, job): (idx, job) for idx, job in enumerate(jobs)}
+        for future in tqdm(as_completed(futures), total=len(futures),
+                           desc="Computing windows", unit="window"):
+            idx, _ = futures[future]
+            state  = job_meta[idx]
+            try:
+                result = future.result()   # {model: [|e_step0|, ..., |e_stepN-1|]}
+                if state not in sq_errors_by_state:
+                    sq_errors_by_state[state] = {m: [[] for _ in range(test_periods)]
+                                                 for m in MODEL_FUNCS}
+                for model_name, abs_errors in result.items():
+                    for step, ae in enumerate(abs_errors):
+                        if step < test_periods:
+                            # store squared error for later mean+sqrt aggregation
+                            sq_errors_by_state[state][model_name][step].append(ae ** 2)
+            except Exception as exc:
+                logger.error(f"Window failed: {exc}")
+
+    # ------------------------------------------------------------------
+    # 3. Aggregate: one RMSE per (state, model, step)
+    #    rmse_by_step[step][model] = [rmse_state1, rmse_state2, ...]  (26 values)
+    # ------------------------------------------------------------------
+    rmse_by_step = {step: {m: [] for m in MODEL_FUNCS} for step in range(test_periods)}
+    for state, models in sq_errors_by_state.items():
+        for model_name, steps_sq in models.items():
+            for step, sq_list in enumerate(steps_sq):
+                if sq_list:
+                    rmse_val = float(np.sqrt(np.mean(sq_list)))
+                    rmse_by_step[step][model_name].append(rmse_val)
+
+    # ------------------------------------------------------------------
+    # 4. Global y-axis range (same scale on every subplot)
+    # ------------------------------------------------------------------
+    all_vals = [v for step in range(test_periods)
+                  for m in MODEL_FUNCS
+                  for v in rmse_by_step[step][m]]
+    y_max = float(np.max(all_vals)) * 1.05 if all_vals else 1.0
+    y_min = 0.0  # RMSE is always >= 0
+
+    # ------------------------------------------------------------------
+    # 5. Build figure
+    #    Layout: 6 rows (steps_per_row=2), each row is one subplot with
+    #    2 step groups on the x-axis. Within each step, 7 boxes sit
+    #    side-by-side — one per model — identified by color only.
+    #    With only 2 steps per row each box has plenty of horizontal room.
+    # ------------------------------------------------------------------
+    steps_per_row = 6
+    n_rows        = math.ceil(test_periods / steps_per_row)  # = 2
+
+    palette = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA",
+               "#FFA15A", "#19D3F3", "#FF6692"]
+    model_names = list(MODEL_FUNCS.keys())
+    color_map   = {m: palette[i % len(palette)] for i, m in enumerate(model_names)}
+
+    row_titles = []
+    for r in range(n_rows):
+        s_start = r * steps_per_row + 1
+        s_end   = min((r + 1) * steps_per_row, test_periods)
+        row_titles.append(f"Steps {s_start} - {s_end}")
+
+    fig = make_subplots(
+        rows=n_rows, cols=1,
+        subplot_titles=row_titles,
+        vertical_spacing=0.03,
+        shared_yaxes=True,
+    )
+
+    n_models   = len(model_names)
+    box_width  = 0.10          # width of each individual box
+    step_gap   = 0.25          # tighter gap between step groups to fit 6 per row
+    step_span  = n_models * box_width   # total width occupied by one step group
+
+    # Pre-compute x centre for every (row, step) group and each model offset
+    # x_centers[row][step] = centre x position of that step group on that row
+    x_centers = {}
+    for r in range(n_rows):
+        x_centers[r] = {}
+        for s in range(steps_per_row):
+            step_idx = r * steps_per_row + s
+            if step_idx >= test_periods:
+                break
+            x_centers[r][step_idx] = s * (step_span + step_gap) + step_span / 2
+
+    # model offset relative to the step centre: centres the 7 boxes around 0
+    model_offsets = {m: (i - (n_models - 1) / 2) * box_width
+                     for i, m in enumerate(model_names)}
+
+    # Build x-axis tick positions and labels per row
+    row_xticks = {}   # row -> (tick_positions, tick_labels)
+    for r in range(n_rows):
+        positions, labels = [], []
+        for step_idx, cx in x_centers[r].items():
+            positions.append(cx)
+            labels.append(f"Step {step_idx + 1}")
+        row_xticks[r] = (positions, labels)
+
+    for model_idx, model_name in enumerate(model_names):
+        show_legend = True
+        for step in range(test_periods):
+            row = step // steps_per_row
+            if step not in x_centers[row]:
+                continue
+            vals = rmse_by_step[step][model_name]
+            if not vals:
+                continue
+
+            cx     = x_centers[row][step]
+            offset = model_offsets[model_name]
+            x_pos  = cx + offset   # exact centre for this model in this step
+
+            fig.add_trace(
+                go.Box(
+                    x=[x_pos] * len(vals),
+                    y=vals,
+                    name=model_name,
+                    legendgroup=model_name,
+                    showlegend=show_legend,
+                    marker_color=color_map[model_name],
+                    fillcolor=color_map[model_name],
+                    width=box_width,
+                    boxmean=False,
+                    whiskerwidth=1.0,
+                    boxpoints="outliers",
+                    jitter=0.15,
+                    marker=dict(
+                        symbol="circle",
+                        size=4,
+                        opacity=0.6,
+                        line=dict(width=0),
+                    ),
+                    line=dict(width=1.5, color="rgba(0,0,0,0.5)"),
+                    opacity=0.85,
+                ),
+                row=row + 1, col=1,
+            )
+            show_legend = False
+
+    for r in range(n_rows):
+        positions, labels = row_xticks[r]
+        fig.update_yaxes(
+            range=[y_min, y_max],
+            title_text="RMSE",
+            title_font=dict(size=20),
+            tickfont=dict(size=18),
+            row=r + 1, col=1,
         )
-        fig.update_xaxes(tickangle=45)
-        figures.append(fig)
+        fig.update_xaxes(
+            tickmode="array",
+            tickvals=positions,
+            ticktext=labels,
+            tickfont=dict(size=18),
+            row=r + 1, col=1,
+        )
 
-        if output_path:
-            out = f"{output_path}_passo{step + 1:02d}.html"
-            fig.write_html(out)
+    title_suffix = f" - {product_name}" if product_name else ""
+    fig.update_layout(
+        title=dict(
+            text=f"RMSE Distribution by Forecast Step and Model{title_suffix}",
+            x=0.5,
+            font=dict(size=22),
+        ),
+        # Width and height sized for a full journal page column (exported at scale=3)
+        width=1400,
+        height=600 * n_rows,
+        template="plotly_white",
+        boxmode="overlay",
+        # Global font floor — catches any text not set explicitly above
+        font=dict(size=18),
+        # Legend at the bottom, horizontal, so it never squeezes the plot area
+        legend=dict(
+            title=dict(text="Model", font=dict(size=18)),
+            orientation="h",
+            yanchor="top",
+            y=-0.12,           # below the bottom x-axis
+            xanchor="center",
+            x=0.5,
+            font=dict(size=18),
+            tracegroupgap=4,
+        ),
+        # Tight margins — legend is below so bottom margin makes room for it
+        margin=dict(t=60, b=120, l=60, r=20),
+    )
 
-    return figures
+    # --- HTML (interactive, for browser preview) ---
+    fig.write_html(output_html, auto_open=True)
+
+    # --- PDF (vector, preferred for LaTeX) ---
+    pdf_path = output_html.replace(".html", ".pdf")
+    try:
+        fig.write_image(pdf_path, format="pdf", width=1400, height=600 * n_rows, scale=1)
+        logger.info(f"Saved PDF  -> {pdf_path}")
+    except Exception as e:
+        logger.warning(f"PDF export failed (install kaleido: pip install kaleido): {e}")
+
+    # --- High-res PNG fallback ---
+    png_path = output_html.replace(".html", ".png")
+    try:
+        fig.write_image(png_path, format="png", width=1400, height=600 * n_rows, scale=3)
+        logger.info(f"Saved PNG  -> {png_path}")
+    except Exception as e:
+        logger.warning(f"PNG export failed: {e}")
+
+    logger.info(f"Saved HTML -> {output_html}")
+    return fig
 
 
-# --- Execução Principal ---
+
+# Chart helpers (unchanged interface)
+# ---------------------------------------------------------------------------
+
+def generate_forecast_chart(serie_historica, serie_previsoes, nome_produto, uf, model_name, rmse):
+    import plotly.express as px
+
+    df_hist = serie_historica.reset_index()
+    df_hist.columns = ['Date', 'Value']
+    df_hist['Tipo'] = 'Histórico'
+
+    df_prev = serie_previsoes.reset_index()
+    df_prev.columns = ['Date', 'Value']
+    df_prev['Tipo'] = 'Previsão'
+
+    df_long = pd.concat([df_hist, df_prev], ignore_index=True)
+    df_long['Date'] = df_long['Date'].astype(str)
+
+    fig = px.line(
+        df_long, x='Date', y='Value', color='Tipo',
+        color_discrete_map={'Histórico': 'blue', 'Previsão': 'red'},
+        title=f"Previsão — {uf}: {nome_produto} | {model_name} (RMSE: {rmse:.2f})",
+        labels={'Date': 'Data', 'Value': 'Preço', 'Tipo': 'Série'},
+    )
+    fig.update_traces(line=dict(dash='dash', width=3), selector=dict(name='Previsão'))
+    fig.update_xaxes(rangeslider=dict(visible=True), type="date")
+    fig.update_layout(title_x=0.5, title_font_size=20, legend_title="Tipo de Série")
+    return fig
+
+
+def error_comparison_table(df, test_periods=12, n_periods=12):
+    results = {}
+    for state in df.columns:
+        series = df[state]
+        if len(series.dropna()) <= test_periods:
+            continue
+        train, test = series[:-test_periods], series[-test_periods:]
+        results[state] = {}
+        for label, fn in [
+            ('ARIMA',         lambda s: _model_forecast_arima(s, n_periods)),
+            ('ETS',           lambda s: _model_forecast_ets(s, n_periods)),
+            ('PROPHET',       lambda s: _model_forecast_prophet(s, n_periods)),
+            ('RANDOM_FOREST', lambda s: random_forest(s, n_periods)),
+            ('LSTM',          lambda s: lstm_forecast(s, n_periods)),
+            ('GRU',           lambda s: gru_forecast(s, n_periods)),
+            ('TRANSFORMER',   lambda s: conv_transformer_forecast(s, n_periods)),
+        ]:
+            fc, _ = fn(train)
+            fc.index = test.index
+            results[state][f'RMSE_{label}'] = calculate_rmse(test, fc)
+            results[state][f'MAPE_{label}'] = calculate_mape(test, fc)
+
+    df_out = pd.DataFrame(results).T
+    df_out.index.name = "UF"
+    return df_out
+
+
+def sliding_error_chart(series, model_func, model_name, test_periods=12, n_periods=12):
+    import plotly.express as px
+    all_sq_errors = []
+    start_index = len(series) + 1
+    stop_index  = start_index - 12
+    for end_idx in range(start_index, stop_index, -1):
+        test_s  = series[end_idx - test_periods: end_idx]
+        train_s = series[:end_idx - test_periods]
+        try:
+            fc, _ = model_func(train_s, n_periods=test_periods)
+            if len(test_s) != len(fc):
+                continue
+            aligned = pd.Series(fc.values, index=test_s.index)
+            all_sq_errors.append(((test_s - aligned) ** 2).values)
+        except Exception:
+            continue
+    if not all_sq_errors:
+        return pd.Series(dtype='float64')
+    rmse_by_horizon = np.sqrt(np.mean(np.array(all_sq_errors), axis=0))
+    labels = [f"Passo {i + 1}" for i in range(test_periods)]
+    return pd.Series(rmse_by_horizon, index=labels, name=f'RMSE Médio - {model_name}')
+
+
+def generate_sliding_chart(rmse_series, model_name, product_name, uf):
+    import plotly.express as px
+    if rmse_series.empty:
+        return px.scatter(title="Dados insuficientes.")
+    df_plot = rmse_series.reset_index()
+    df_plot.columns = ['Horizonte', 'RMSE']
+    fig = px.line(
+        df_plot, x='Horizonte', y='RMSE', markers=True,
+        title=f"RMSE por Passo — {model_name} | {product_name} | {uf}",
+        labels={'Horizonte': 'Horizonte de Previsão', 'RMSE': 'RMSE Médio'},
+    )
+    fig.update_layout(title_x=0.5, title_font_size=20, xaxis=dict(tickmode='linear'))
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     EXCEL_FILE_PATH = "../Databases/DatabaseConabv5.xlsx"
-    SHEET_NAME = "ARROZ"
-    OUTPUT_HTML_PATH = 'previsao_interativa.html'
+    SHEET_NAME      = "ACUCAR"
+    OUTPUT_HTML     = "sliding_rmse_boxplots.html"
+    CACHE_DIR       = ".boxplot_cache"
 
-    TEST_PERIODS = 12
+    TEST_PERIODS     = 12
     FORECAST_PERIODS = 12
-    MODEL_TO_RUN = "error_comparison_table"
-    # Opções: "Auto_Arima", "ETS", "Prophet", "error_comparison_table", "Random_Forest", "sliding_error_chart", "sliding_rmse_boxplots"
-    # LSTM", "GRU", "Transformer"
-    UF="MS"
+    MODEL_TO_RUN     = "sliding_rmse_boxplots"
+    UF               = "MS"
 
-    # 1. Carrega os dados
     df = pd.read_excel(EXCEL_FILE_PATH, sheet_name=SHEET_NAME, index_col=0)
-
-    # 2. Fixa o nome do índice (data)
     df.index.name = 'Date'
 
-    # Seleciona uma série temporal específica (por exemplo, o primeiro estado)
-    state = df.columns[5]
-    series = df[UF]
-
+    series      = df[UF]
     train_series = series[:-TEST_PERIODS]
-    test_series = series[-TEST_PERIODS:]  # Valores reais que o modelo tentará prever
+    test_series  = series[-TEST_PERIODS:]
 
-    func_map = {
-        "Auto_Arima": auto_arima_forecast,
-        "ETS": ets_forecast,
-        "Prophet": prophet_forecast,
-        "RandomForest": random_forest,
-        "LSTM": lstm_forecast
-    }
+    # Columns to exclude from all analysis (e.g. test series left in by mistake)
+    EXCLUDE_STATES = []   # e.g. ["RANDOM"]
+    if EXCLUDE_STATES:
+        df = df.drop(columns=EXCLUDE_STATES, errors="ignore")
 
-    if MODEL_TO_RUN == "Auto_Arima":
-        model_name = "Auto ARIMA"
-        prediction, model = auto_arima_forecast(train_series, seasonal=True, m=12, n_periods=12)
-    elif MODEL_TO_RUN == "ETS":
-        model_name = "ETS (Holt-Winters)"
-        prediction, model = ets_forecast(train_series, m=12, n_periods=12, trend='add', seasonal_model='add')
-    elif MODEL_TO_RUN == "Prophet":
-        model_name = "Prophet"
-        prediction, model = prophet_forecast(train_series, seasonal=True, m=12, n_periods=12)
-    elif MODEL_TO_RUN == "error_comparison_table":
-        df_rmse = error_comparison_table(df, test_periods=TEST_PERIODS, n_periods=FORECAST_PERIODS)
-        print("\n--- TABELA COMPARATIVA DE RMSE DOS MODELOS ---")
-        df_rmse.to_excel(f"{MODEL_TO_RUN}_modelos.xlsx")
-        exit(0)
-    elif MODEL_TO_RUN == "Random_Forest":
-        model_name = "Random Forest"
-        prediction, model = random_forest(train_series, n_periods=12)
-    elif MODEL_TO_RUN == "sliding_error_chart":
-        model_name = "random_forest"
-        model_func = random_forest
-        error_values = sliding_error_chart(series,model_func, model_name, test_periods=TEST_PERIODS, n_periods=FORECAST_PERIODS)
-        fig = generate_sliding_chart(error_values, model_name, SHEET_NAME, UF)
-        fig.write_html(OUTPUT_HTML_PATH, auto_open=True)
-        exit(0)
-    elif MODEL_TO_RUN == "sliding_rmse_boxplots":
-        figures = sliding_rmse_boxplots(
+    if MODEL_TO_RUN == "sliding_rmse_boxplots":
+        fig = sliding_rmse_boxplots(
             df,
             product_name=SHEET_NAME,
             test_periods=TEST_PERIODS,
-            n_periods=FORECAST_PERIODS,
             min_train_size=36,
             max_windows=12,
-            output_path="sliding_rmse_boxplot",
+            output_html=OUTPUT_HTML,
+            cache_dir=CACHE_DIR,
+            n_jobs=-1,
         )
-        if figures:
-            figures[0].write_html("sliding_rmse_boxplot_passo01.html", auto_open=True)
-            for i, fig in enumerate(figures[1:], start=2):
-                fig.write_html(f"sliding_rmse_boxplot_passo{i:02d}.html")
-            print(f"Gerados {len(figures)} gráficos de boxplot (passo 1 a {len(figures)}).")
-        exit(0)
-    elif MODEL_TO_RUN == "LSTM":
-        model_name = "LSTM"
-        prediction, model = lstm_forecast(train_series, n_periods=12)
-    elif MODEL_TO_RUN == "GRU":
-        model_name = "GRU"
-        prediction, model = gru_forecast(train_series, n_periods=12)
-    elif MODEL_TO_RUN == "Transformer":
-        model_name = "Transformer"
-        prediction, model = conv_transformer_forecast(train_series, n_periods=12)
+        print(f"Done. Open {OUTPUT_HTML} in your browser.")
+
+    elif MODEL_TO_RUN == "sliding_rmse_excel":
+        summary = sliding_rmse_excel(
+            df,
+            product_name=SHEET_NAME,
+            test_periods=TEST_PERIODS,
+            min_train_size=36,
+            max_windows=12,
+            output_xlsx="sliding_rmse.xlsx",
+            cache_dir=CACHE_DIR,
+            n_jobs=-1,
+        )
+        print(summary)
+
+    elif MODEL_TO_RUN == "error_comparison_table":
+        df_rmse = error_comparison_table(df, test_periods=TEST_PERIODS, n_periods=FORECAST_PERIODS)
+        df_rmse.to_excel(f"{MODEL_TO_RUN}_modelos.xlsx")
+        print(df_rmse)
+
+    elif MODEL_TO_RUN == "sliding_error_chart":
+        errors = sliding_error_chart(series, random_forest, "Random Forest",
+                                     test_periods=TEST_PERIODS, n_periods=FORECAST_PERIODS)
+        fig = generate_sliding_chart(errors, "Random Forest", SHEET_NAME, UF)
+        fig.write_html("sliding_error_chart.html", auto_open=True)
+
     else:
-        raise ValueError(f"Modelo desconhecido: {MODEL_TO_RUN}")
-
-    if len(test_series) == len(prediction):
-        prediction.index = test_series.index
-
-    rmse = calculate_rmse(test_series, prediction)
-
-    print(f"\n--- VALIDAÇÃO DO MODELO {model_name} ---")
-    print(f"Série Analisada: {UF} do produto {SHEET_NAME}")
-    print(f"Períodos de Teste (Validação): {TEST_PERIODS}")
-    print(f"RMSE (Root Mean Square Error): {rmse:.2f}")
-
-    fig = generate_forecast_chart(series,prediction, SHEET_NAME,  uf=UF, model_name=model_name, rmse=rmse)
-    fig.write_html(OUTPUT_HTML_PATH, auto_open=True)
-
+        # Single-model forecast
+        fn_map = {
+            "Auto_Arima":   lambda: auto_arima_forecast(train_series, seasonal=True, m=12, n_periods=12),
+            "ETS":          lambda: ets_forecast(train_series, m=12, n_periods=12),
+            "Prophet":      lambda: prophet_forecast(train_series, seasonal=True, m=12, n_periods=12),
+            "Random_Forest":lambda: random_forest(train_series, n_periods=12),
+            "LSTM":         lambda: lstm_forecast(train_series, n_periods=12),
+            "GRU":          lambda: gru_forecast(train_series, n_periods=12),
+            "Transformer":  lambda: conv_transformer_forecast(train_series, n_periods=12),
+        }
+        prediction, model = fn_map[MODEL_TO_RUN]()
+        if len(test_series) == len(prediction):
+            prediction.index = test_series.index
+        rmse = calculate_rmse(test_series, prediction)
+        print(f"RMSE ({MODEL_TO_RUN}): {rmse:.2f}")
+        fig = generate_forecast_chart(series, prediction, SHEET_NAME, UF, MODEL_TO_RUN, rmse)
+        fig.write_html("previsao_interativa.html", auto_open=True)
