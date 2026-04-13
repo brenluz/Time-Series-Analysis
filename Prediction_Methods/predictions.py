@@ -1,8 +1,8 @@
+import hashlib
 import math
 import os
-import logging
-import hashlib
 import pickle
+import logging
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -68,9 +68,10 @@ def series_to_sequences(series, n_steps):
 # ---------------------------------------------------------------------------
 
 class LSTMModel(nn.Module):
-    def __init__(self, input_size=1, hidden_layer_size=50, output_size=1):
+    def __init__(self, input_size=1, hidden_layer_size=64, output_size=1):
         super().__init__()
-        self.lstm = nn.LSTM(input_size, hidden_layer_size, batch_first=True)
+        self.lstm = nn.LSTM(input_size, hidden_layer_size, num_layers=2,
+                            batch_first=True, dropout=0.1)
         self.linear = nn.Linear(hidden_layer_size, output_size)
 
     def forward(self, x):
@@ -79,9 +80,10 @@ class LSTMModel(nn.Module):
 
 
 class GRUmodel(nn.Module):
-    def __init__(self, input_size=1, hidden_layer_size=50, output_size=1):
+    def __init__(self, input_size=1, hidden_layer_size=64, output_size=1):
         super().__init__()
-        self.gru = nn.GRU(input_size, hidden_layer_size, batch_first=True)
+        self.gru = nn.GRU(input_size, hidden_layer_size, num_layers=2,
+                          batch_first=True, dropout=0.1)
         self.linear = nn.Linear(hidden_layer_size, output_size)
 
     def forward(self, x):
@@ -129,11 +131,21 @@ class TimeSeriesTransformer(nn.Module):
 # Shared batch trainer (no epoch reduction, early stopping instead)
 # ---------------------------------------------------------------------------
 
-def _train_batch(model, X_tensor, y_tensor, epochs, lr=0.001, patience=15, clip=1.0):
-    """Full-batch training with early stopping — preserves accuracy, avoids wasted epochs."""
+def _train_batch(model, X_tensor, y_tensor, epochs, lr=0.001, patience=30, clip=1.0):
+    """
+    Full-batch training with early stopping and best-weight restoration.
+    Saves the best model state and restores it at the end, so the returned
+    model is the one with lowest training loss — not the last epoch.
+    """
+    import copy
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=patience // 2, min_lr=1e-6
+    )
     loss_fn = nn.MSELoss()
-    best_loss, counter = float('inf'), 0
+    best_loss   = float('inf')
+    best_state  = copy.deepcopy(model.state_dict())
+    counter     = 0
     model.train()
     for _ in range(epochs):
         optimizer.zero_grad()
@@ -141,12 +153,17 @@ def _train_batch(model, X_tensor, y_tensor, epochs, lr=0.001, patience=15, clip=
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
+        scheduler.step(loss.item())
         if loss.item() < best_loss - 1e-6:
-            best_loss, counter = loss.item(), 0
+            best_loss  = loss.item()
+            best_state = copy.deepcopy(model.state_dict())
+            counter    = 0
         else:
             counter += 1
             if counter >= patience:
                 break
+    # Restore best weights
+    model.load_state_dict(best_state)
     return model
 
 
@@ -228,7 +245,7 @@ def lstm_forecast(series, n_periods=12):
     y_t = torch.FloatTensor(y)
 
     model = LSTMModel()
-    model = _train_batch(model, X_t, y_t, epochs=25)
+    model = _train_batch(model, X_t, y_t, epochs=300, patience=30)
 
     model.eval()
     cur = scaled[-n_periods:].copy()
@@ -259,7 +276,7 @@ def gru_forecast(series, n_periods=12):
     y_t = torch.FloatTensor(y)
 
     model = GRUmodel()
-    model = _train_batch(model, X_t, y_t, epochs=25)
+    model = _train_batch(model, X_t, y_t, epochs=300, patience=30)
 
     model.eval()
     cur = scaled[-n_periods:].copy()
@@ -288,8 +305,8 @@ def conv_transformer_forecast(series, n_periods=12):
     X_t = torch.FloatTensor(X).transpose(0, 1).unsqueeze(2)  # [seq, samples, 1]
     y_t = torch.FloatTensor(y)
 
-    model = TimeSeriesTransformer(input_dim=1, d_model=128, nhead=8, num_layers=3, dropout=0.1)
-    model = _train_batch(model, X_t, y_t, epochs=200, lr=0.0005)
+    model = TimeSeriesTransformer(input_dim=1, d_model=64, nhead=8, num_layers=2, dropout=0.1)
+    model = _train_batch(model, X_t, y_t, epochs=500, lr=0.001, patience=40)
 
     model.eval()
     cur = scaled[-n_periods:].copy()
