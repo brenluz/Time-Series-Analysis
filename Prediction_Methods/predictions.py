@@ -982,7 +982,7 @@ def generate_sliding_chart(rmse_series, model_name, product_name, uf):
 
 if __name__ == "__main__":
     EXCEL_FILE_PATH = "../Databases/DatabaseConabv5.xlsx"
-    SHEET_NAME      = "ACUCAR"
+    SHEET_NAME      = "ARROZ"
     OUTPUT_HTML     = "sliding_rmse_boxplots.html"
     CACHE_DIR       = ".boxplot_cache"
 
