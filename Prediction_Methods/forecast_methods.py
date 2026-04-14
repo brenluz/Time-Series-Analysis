@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 
 from features import create_features, series_to_sequences
-from models import LSTMModel, GRUModel, TimeSeriesTransformer
+from models import LSTMModel, GRUModel, TimeSeriesTransformer, Informer
 from training import train_batch
 
 
@@ -208,6 +208,121 @@ def transformer_forecast(series: pd.Series, n_periods: int = 12):
     return pd.Series(preds, index=idx, name='Transformer'), model
 
 
+
+def informer_forecast(series: pd.Series, n_periods: int = 12):
+    """
+    Train an Informer encoder-decoder and forecast n_periods ahead.
+
+    Encoder input  : full historical window (enc_len observations)
+    Decoder input  : start token (last label_len observations) + n_periods zero slots
+    Inference      : single forward pass — the decoder generates all n_periods
+                     future values simultaneously (generative decoding, no loop).
+
+    Temporal features [value, sin(2pi*month/12), cos(2pi*month/12)] are built
+    automatically from the series index so the model is aware of seasonality.
+    """
+    min_len = 2 * n_periods + 4
+    if len(series.dropna()) < min_len:
+        return pd.Series(dtype='float64'), None
+
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(series.values.reshape(-1, 1)).flatten()
+
+    enc_len   = len(scaled)       # use full history as encoder input
+    label_len = n_periods         # start-token = last n_periods observations
+    pred_len  = n_periods
+
+    # Infer start month from the series index (fall back to 1 if unavailable)
+    try:
+        start_month = int(pd.Timestamp(series.index[0]).month)
+    except Exception:
+        start_month = 1
+
+    # Build training samples --------------------------------------------------
+    # Each sample: encoder sees enc_window steps, decoder predicts pred_len steps
+    enc_window = max(n_periods * 2, 24)   # history window fed to encoder
+    X_enc_list, X_dec_list, y_list = [], [], []
+
+    for i in range(enc_window, len(scaled) - pred_len + 1):
+        enc_vals  = torch.FloatTensor(scaled[i - enc_window: i])
+        dec_start = scaled[i - label_len: i]
+        dec_zeros = np.zeros(pred_len)
+        dec_vals  = torch.FloatTensor(np.concatenate([dec_start, dec_zeros]))
+        target    = torch.FloatTensor(scaled[i: i + pred_len])
+
+        sm_enc = ((start_month + (i - enc_window)) - 1) % 12 + 1
+        sm_dec = ((start_month + (i - label_len))  - 1) % 12 + 1
+
+        X_enc_list.append(Informer.build_features(enc_vals,  sm_enc))
+        X_dec_list.append(Informer.build_features(dec_vals,  sm_dec))
+        y_list.append(target)
+
+    if len(X_enc_list) == 0:
+        return pd.Series(dtype='float64'), None
+
+    # Stack into batch tensors: [samples, seq_len, 3]
+    X_enc_t = torch.cat(X_enc_list, dim=0)                 # [N, enc_window, 3]
+    X_dec_t = torch.cat(X_dec_list, dim=0)                 # [N, label+pred, 3]
+    y_t     = torch.stack(y_list, dim=0)                   # [N, pred_len]
+
+    # Build and train model ---------------------------------------------------
+    model = Informer(
+        d_model=64, n_heads=8, e_layers=2, d_layers=1,
+        d_ff=256, factor=5, dropout=0.1,
+        label_len=label_len, pred_len=pred_len,
+    )
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=20, min_lr=1e-6)
+    loss_fn    = torch.nn.MSELoss()
+    best_loss  = float('inf')
+    best_state = None
+    patience_counter = 0
+    patience  = 40
+
+    import copy
+    model.train()
+    for epoch in range(500):
+        optimizer.zero_grad()
+        pred = model(X_enc_t, X_dec_t)   # [N, pred_len]
+        loss = loss_fn(pred, y_t)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        scheduler.step(loss.item())
+
+        if loss.item() < best_loss - 1e-6:
+            best_loss        = loss.item()
+            best_state       = copy.deepcopy(model.state_dict())
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                break
+
+    model.load_state_dict(best_state)
+    model.eval()
+
+    # Inference — single generative pass --------------------------------------
+    with torch.no_grad():
+        enc_vals = torch.FloatTensor(scaled[-enc_window:])
+        sm_enc   = ((start_month + len(scaled) - enc_window) - 1) % 12 + 1
+        sm_dec   = ((start_month + len(scaled) - label_len)  - 1) % 12 + 1
+
+        dec_start = scaled[-label_len:]
+        dec_zeros = np.zeros(pred_len)
+        dec_vals  = torch.FloatTensor(np.concatenate([dec_start, dec_zeros]))
+
+        x_enc = Informer.build_features(enc_vals, sm_enc)   # [1, enc_window, 3]
+        x_dec = Informer.build_features(dec_vals, sm_dec)   # [1, label+pred, 3]
+
+        preds_scaled = model(x_enc, x_dec).squeeze(0).numpy()  # [pred_len]
+
+    preds = scaler.inverse_transform(preds_scaled.reshape(-1, 1)).flatten()
+    idx   = pd.date_range(start=series.index[-1], periods=n_periods + 1, freq='MS')[1:]
+    return pd.Series(preds, index=idx, name='Informer'), model
+
 # ---------------------------------------------------------------------------
 # Wrappers with uniform (series, n_periods) signature
 # ---------------------------------------------------------------------------
@@ -234,4 +349,5 @@ MODEL_FUNCS: dict = {
     "LSTM":          lstm_forecast,
     "GRU":           gru_forecast,
     "Transformer":   transformer_forecast,
+    "Informer":      informer_forecast,
 }
