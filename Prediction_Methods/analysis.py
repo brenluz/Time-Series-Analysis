@@ -69,6 +69,41 @@ def _build_jobs(df: pd.DataFrame, test_periods: int,
     return jobs, job_meta
 
 
+def _resolve_max_workers(n_jobs: int) -> int:
+    """
+    Resolve an effective positive worker count from user request/env cap.
+
+    Rules:
+    - n_jobs=-1 means "use all available".
+    - ML_MAX_CPU_CORES, when valid, caps the final worker count.
+    - Any invalid or non-positive value falls back to 1.
+    """
+    cpu_total = os.cpu_count() or 1
+    requested = cpu_total if n_jobs == -1 else n_jobs
+    if requested is None:
+        requested = cpu_total
+    try:
+        requested = int(requested)
+    except (TypeError, ValueError):
+        requested = cpu_total
+    if requested < 1:
+        requested = 1
+
+    cap_raw = os.getenv("ML_MAX_CPU_CORES")
+    cap = None
+    if cap_raw is not None:
+        try:
+            cap_int = int(cap_raw)
+            if cap_int > 0:
+                cap = cap_int
+        except (TypeError, ValueError):
+            cap = None
+
+    if cap is not None:
+        requested = min(requested, cap)
+    return min(requested, cpu_total)
+
+
 def _run_parallel(jobs: list, job_meta: list, cache_dir: str, n_jobs: int,
                   desc: str = "Computing windows"):
     """
@@ -81,7 +116,8 @@ def _run_parallel(jobs: list, job_meta: list, cache_dir: str, n_jobs: int,
     full_jobs = [(*job, cache_dir) for job in jobs]
     results   = []
 
-    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+    max_workers = _resolve_max_workers(n_jobs)
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_worker, job): idx
             for idx, job in enumerate(full_jobs)
@@ -135,9 +171,7 @@ def sliding_rmse_boxplots(
     .png  : raster at scale=3, fallback for LaTeX
     """
     os.makedirs(cache_dir, exist_ok=True)
-    if n_jobs == -1:
-        import multiprocessing
-        n_jobs = multiprocessing.cpu_count()
+    n_jobs = _resolve_max_workers(n_jobs)
 
     logger.info(
         f"sliding_rmse_boxplots | product={product_name!r} "
@@ -322,9 +356,7 @@ def sliding_rmse_excel(
     Sheet per state : per-window per-step absolute errors, MultiIndex columns.
     """
     os.makedirs(cache_dir, exist_ok=True)
-    if n_jobs == -1:
-        import multiprocessing
-        n_jobs = multiprocessing.cpu_count()
+    n_jobs = _resolve_max_workers(n_jobs)
 
     logger.info(
         f"sliding_rmse_excel | product={product_name!r} "

@@ -1,6 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+import os
 import numpy as np
 import pandas as pd
 import torch
@@ -14,6 +15,62 @@ from sklearn.preprocessing import MinMaxScaler
 from features import create_features, series_to_sequences
 from models import LSTMModel, GRUModel, TimeSeriesTransformer, Informer
 from training import train_batch
+
+_RUNTIME_LIMITS_APPLIED = False
+
+
+def get_max_cpu_cores() -> int | None:
+    """Read and normalize optional CPU-core cap from environment."""
+    raw = os.getenv("ML_MAX_CPU_CORES")
+    if raw is None:
+        return None
+    try:
+        cores = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return cores if cores > 0 else None
+
+
+def _apply_torch_cpu_limits() -> None:
+    """
+    Apply torch CPU thread limits once per process.
+
+    set_num_interop_threads can only be called before inter-op parallel work
+    starts, so we keep this best-effort and ignore runtime restriction errors.
+    """
+    global _RUNTIME_LIMITS_APPLIED
+    if _RUNTIME_LIMITS_APPLIED:
+        return
+
+    cores = get_max_cpu_cores()
+    if cores is None:
+        return
+
+    torch.set_num_threads(cores)
+    try:
+        torch.set_num_interop_threads(cores)
+    except RuntimeError:
+        pass
+    _RUNTIME_LIMITS_APPLIED = True
+
+
+def resolve_torch_device(requested: str | None = None) -> torch.device:
+    """
+    Resolve compute device from explicit request or environment.
+
+    Supported values: "cuda", "cpu", "auto".
+    """
+    _apply_torch_cpu_limits()
+
+    mode = (requested or os.getenv("ML_DEVICE", "auto")).strip().lower()
+    if mode not in {"cuda", "cpu", "auto"}:
+        mode = "auto"
+
+    if mode == "cpu":
+        return torch.device("cpu")
+    if mode == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +144,12 @@ def random_forest(series: pd.Series, n_periods: int = 12):
     ).dropna(subset=['y'])
 
     X_cols = [c for c in df_features.columns if c not in ['ds', 'y']]
-    model  = RandomForestRegressor(n_estimators=100, random_state=25, n_jobs=-1)
+    rf_jobs = get_max_cpu_cores()
+    model  = RandomForestRegressor(
+        n_estimators=100,
+        random_state=25,
+        n_jobs=rf_jobs if rf_jobs is not None else -1,
+    )
     model.fit(df_features[X_cols], df_features['y'])
 
     last_date    = series.index[-1]
@@ -108,7 +170,7 @@ def random_forest(series: pd.Series, n_periods: int = 12):
     return pd.Series(predictions, index=future_dates, name='RF'), model
 
 
-def lstm_forecast(series: pd.Series, n_periods: int = 12):
+def lstm_forecast(series: pd.Series, n_periods: int = 12, device: str | None = None):
     """Train an LSTM and forecast n_periods ahead via walk-forward inference."""
     if len(series.dropna()) < n_periods + 2:
         return pd.Series(dtype='float64'), None
@@ -119,18 +181,21 @@ def lstm_forecast(series: pd.Series, n_periods: int = 12):
     if X.shape[0] == 0:
         return pd.Series(dtype='float64'), None
 
+    compute_device = resolve_torch_device(device)
     X_t = torch.FloatTensor(X).unsqueeze(2)   # [samples, seq_len, 1]
     y_t = torch.FloatTensor(y)
 
     model = LSTMModel()
-    model = train_batch(model, X_t, y_t, epochs=300, patience=30)
+    model = train_batch(
+        model, X_t, y_t, epochs=300, patience=30, device=compute_device
+    )
     model.eval()
 
     cur   = scaled[-n_periods:].copy()
     preds = []
     with torch.no_grad():
         for _ in range(n_periods):
-            inp = torch.FloatTensor(cur).unsqueeze(0).unsqueeze(2)  # [1, seq, 1]
+            inp = torch.FloatTensor(cur).unsqueeze(0).unsqueeze(2).to(compute_device)  # [1, seq, 1]
             p   = model(inp).item()
             preds.append(p)
             cur = np.roll(cur, -1)
@@ -141,7 +206,7 @@ def lstm_forecast(series: pd.Series, n_periods: int = 12):
     return pd.Series(preds, index=idx, name='LSTM'), model
 
 
-def gru_forecast(series: pd.Series, n_periods: int = 12):
+def gru_forecast(series: pd.Series, n_periods: int = 12, device: str | None = None):
     """Train a GRU and forecast n_periods ahead via walk-forward inference."""
     if len(series.dropna()) < n_periods + 2:
         return pd.Series(dtype='float64'), None
@@ -152,18 +217,21 @@ def gru_forecast(series: pd.Series, n_periods: int = 12):
     if X.shape[0] == 0:
         return pd.Series(dtype='float64'), None
 
+    compute_device = resolve_torch_device(device)
     X_t = torch.FloatTensor(X).unsqueeze(2)
     y_t = torch.FloatTensor(y)
 
     model = GRUModel()
-    model = train_batch(model, X_t, y_t, epochs=300, patience=30)
+    model = train_batch(
+        model, X_t, y_t, epochs=300, patience=30, device=compute_device
+    )
     model.eval()
 
     cur   = scaled[-n_periods:].copy()
     preds = []
     with torch.no_grad():
         for _ in range(n_periods):
-            inp = torch.FloatTensor(cur).unsqueeze(0).unsqueeze(2)
+            inp = torch.FloatTensor(cur).unsqueeze(0).unsqueeze(2).to(compute_device)
             p   = model(inp).item()
             preds.append(p)
             cur = np.roll(cur, -1)
@@ -174,11 +242,12 @@ def gru_forecast(series: pd.Series, n_periods: int = 12):
     return pd.Series(preds, index=idx, name='GRU'), model
 
 
-def transformer_forecast(series: pd.Series, n_periods: int = 12):
+def transformer_forecast(series: pd.Series, n_periods: int = 12, device: str | None = None):
     """Train a Transformer encoder and forecast n_periods ahead."""
     if len(series.dropna()) < n_periods + 1:
         return pd.Series(dtype='float64'), None
 
+    compute_device = resolve_torch_device(device)
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(series.values.reshape(-1, 1)).flatten()
     X, y   = series_to_sequences(scaled, n_periods)
@@ -190,14 +259,16 @@ def transformer_forecast(series: pd.Series, n_periods: int = 12):
     model = TimeSeriesTransformer(
         input_dim=1, d_model=64, nhead=8, num_layers=2, dropout=0.1
     )
-    model = train_batch(model, X_t, y_t, epochs=500, lr=0.001, patience=40)
+    model = train_batch(
+        model, X_t, y_t, epochs=500, lr=0.001, patience=40, device=compute_device
+    )
     model.eval()
 
     cur   = scaled[-n_periods:].copy()
     preds = []
     with torch.no_grad():
         for _ in range(n_periods):
-            inp = torch.FloatTensor(cur).view(n_periods, 1, 1)
+            inp = torch.FloatTensor(cur).view(n_periods, 1, 1).to(compute_device)
             p   = model(inp).item()
             preds.append(p)
             cur = np.roll(cur, -1)
@@ -209,7 +280,7 @@ def transformer_forecast(series: pd.Series, n_periods: int = 12):
 
 
 
-def informer_forecast(series: pd.Series, n_periods: int = 12):
+def informer_forecast(series: pd.Series, n_periods: int = 12, device: str | None = None):
     """
     Train an Informer encoder-decoder and forecast n_periods ahead.
 
@@ -225,6 +296,7 @@ def informer_forecast(series: pd.Series, n_periods: int = 12):
     if len(series.dropna()) < min_len:
         return pd.Series(dtype='float64'), None
 
+    compute_device = resolve_torch_device(device)
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(series.values.reshape(-1, 1)).flatten()
 
@@ -244,11 +316,11 @@ def informer_forecast(series: pd.Series, n_periods: int = 12):
     X_enc_list, X_dec_list, y_list = [], [], []
 
     for i in range(enc_window, len(scaled) - pred_len + 1):
-        enc_vals  = torch.FloatTensor(scaled[i - enc_window: i])
+        enc_vals  = torch.FloatTensor(scaled[i - enc_window: i]).to(compute_device)
         dec_start = scaled[i - label_len: i]
         dec_zeros = np.zeros(pred_len)
-        dec_vals  = torch.FloatTensor(np.concatenate([dec_start, dec_zeros]))
-        target    = torch.FloatTensor(scaled[i: i + pred_len])
+        dec_vals  = torch.FloatTensor(np.concatenate([dec_start, dec_zeros])).to(compute_device)
+        target    = torch.FloatTensor(scaled[i: i + pred_len]).to(compute_device)
 
         sm_enc = ((start_month + (i - enc_window)) - 1) % 12 + 1
         sm_dec = ((start_month + (i - label_len))  - 1) % 12 + 1
@@ -270,7 +342,7 @@ def informer_forecast(series: pd.Series, n_periods: int = 12):
         d_model=64, n_heads=8, e_layers=2, d_layers=1,
         d_ff=256, factor=5, dropout=0.1,
         label_len=label_len, pred_len=pred_len,
-    )
+    ).to(compute_device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -306,18 +378,18 @@ def informer_forecast(series: pd.Series, n_periods: int = 12):
 
     # Inference — single generative pass --------------------------------------
     with torch.no_grad():
-        enc_vals = torch.FloatTensor(scaled[-enc_window:])
+        enc_vals = torch.FloatTensor(scaled[-enc_window:]).to(compute_device)
         sm_enc   = ((start_month + len(scaled) - enc_window) - 1) % 12 + 1
         sm_dec   = ((start_month + len(scaled) - label_len)  - 1) % 12 + 1
 
         dec_start = scaled[-label_len:]
         dec_zeros = np.zeros(pred_len)
-        dec_vals  = torch.FloatTensor(np.concatenate([dec_start, dec_zeros]))
+        dec_vals  = torch.FloatTensor(np.concatenate([dec_start, dec_zeros])).to(compute_device)
 
         x_enc = Informer.build_features(enc_vals, sm_enc)   # [1, enc_window, 3]
         x_dec = Informer.build_features(dec_vals, sm_dec)   # [1, label+pred, 3]
 
-        preds_scaled = model(x_enc, x_dec).squeeze(0).numpy()  # [pred_len]
+        preds_scaled = model(x_enc, x_dec).squeeze(0).detach().cpu().numpy()  # [pred_len]
 
     preds = scaler.inverse_transform(preds_scaled.reshape(-1, 1)).flatten()
     idx   = pd.date_range(start=series.index[-1], periods=n_periods + 1, freq='MS')[1:]

@@ -40,14 +40,22 @@ def _compute_window_errors(
            Each value is |actual_k - predicted_k| at forecast step k.
            The calling function squares and averages these to compute RMSE.
     """
-    key_data  = np.concatenate([train_values, test_values])
-    key_bytes = f"{state}_{key_data.tobytes()}_{test_periods}".encode()
+    device_mode = os.getenv("ML_DEVICE", "auto").strip().lower()
+    cpu_cap = os.getenv("ML_MAX_CPU_CORES", "").strip()
+    key_data = np.concatenate([train_values, test_values])
+    key_bytes = (
+        f"{state}_{key_data.tobytes()}_{test_periods}_{device_mode}_{cpu_cap}"
+    ).encode()
     cache_key  = hashlib.md5(key_bytes).hexdigest()
     cache_path = os.path.join(cache_dir, f"{cache_key}.pkl")
 
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
-            return pickle.load(f)
+            cached = pickle.load(f)
+        # Guard against stale/failed runs that cached an empty dict:
+        # those produce plots with no box traces at all.
+        if isinstance(cached, dict) and len(cached) > 0:
+            return cached
 
     train_series = pd.Series(train_values, index=train_index)
     test_series  = pd.Series(test_values,  index=test_index)
@@ -65,8 +73,11 @@ def _compute_window_errors(
         except Exception:
             pass
 
-    with open(cache_path, 'wb') as f:
-        pickle.dump(results, f)
+    # Do not persist empty results; they are usually transient failures and
+    # would otherwise poison future runs for the same window key.
+    if results:
+        with open(cache_path, 'wb') as f:
+            pickle.dump(results, f)
 
     return results
 

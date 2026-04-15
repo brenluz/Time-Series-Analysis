@@ -11,7 +11,8 @@ def train_batch(model: nn.Module,
                 epochs: int,
                 lr: float = 0.001,
                 patience: int = 30,
-                clip: float = 1.0) -> nn.Module:
+                clip: float = 1.0,
+                device: torch.device | str | None = None) -> nn.Module:
     """
     Full-batch training with early stopping and best-weight restoration.
 
@@ -37,6 +38,15 @@ def train_batch(model: nn.Module,
     -------
     model : The model loaded with its best weights.
     """
+    if device is None:
+        device = torch.device("cpu")
+    else:
+        device = torch.device(device)
+
+    model = model.to(device)
+    X_tensor = X_tensor.to(device)
+    y_tensor = y_tensor.to(device)
+
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5,
