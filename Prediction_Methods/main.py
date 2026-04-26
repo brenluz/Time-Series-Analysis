@@ -45,7 +45,7 @@ FORECAST_PERIODS = 12
 UF               = "MS"
 
 # Columns to exclude (e.g. test series accidentally left in the database)
-EXCLUDE_STATES   = []   # e.g. ["RANDOM"]
+EXCLUDE_STATES   = []
 
 # Choose what to run:
 #   "sliding_rmse_boxplots"  — publication-quality boxplot HTML/PDF/PNG

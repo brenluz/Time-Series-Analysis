@@ -1,0 +1,541 @@
+sheet,state,action,reason,n_valid,n_missing,n_leading_nan,n_trailing_nan,n_interior_gaps_filled
+ARROZ,AC,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,AL,DROPPED,9 leading NaN(s) — cannot interpolate without anchor,99,9,9,0,0
+ARROZ,AM,DROPPED,61 leading NaN(s) — cannot interpolate without anchor,47,61,61,0,0
+ARROZ,AP,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+ARROZ,BA,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+ARROZ,CE,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,DF,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ARROZ,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ARROZ,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,MA,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+ARROZ,MG,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ARROZ,MS,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ARROZ,MT,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ARROZ,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,PI,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+ARROZ,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+ARROZ,RN,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ARROZ,RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,RS,DROPPED,3 leading NaN(s) — cannot interpolate without anchor,103,5,3,0,0
+ARROZ,SC,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,106,2,1,0,0
+ARROZ,SE,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+ARROZ,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+ARROZ,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+ACUCAR,AC,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+ACUCAR,AL,DROPPED,10 leading NaN(s) — cannot interpolate without anchor,98,10,10,0,0
+ACUCAR,AM,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+ACUCAR,AP,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+ACUCAR,BA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,DF,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+ACUCAR,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+ACUCAR,MA,KEPT_AS_IS,no missing values,108,0,0,0,0
+ACUCAR,MG,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,MS,DROPPED,104 leading NaN(s) — cannot interpolate without anchor,4,104,104,0,0
+ACUCAR,MT,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+ACUCAR,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,PI,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+ACUCAR,PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+ACUCAR,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+ACUCAR,RN,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,RR,DROPPED,25 leading NaN(s) — cannot interpolate without anchor,83,25,25,0,0
+ACUCAR,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+ACUCAR,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+ACUCAR,SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+ACUCAR,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+ACUCAR,TO,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+BATATA,AC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,AL,DROPPED,9 leading NaN(s); 14 trailing NaN(s) — cannot interpolate without anchor,81,27,9,14,0
+BATATA,AM,DROPPED,1 leading NaN(s); 15 trailing NaN(s) — cannot interpolate without anchor,92,16,1,15,0
+BATATA,AP,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,BA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+BATATA,CE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+BATATA,DF,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,92,16,0,15,0
+BATATA,ES,DROPPED,3 trailing NaN(s) — cannot interpolate without anchor,105,3,0,3,0
+BATATA,GO,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+BATATA,MA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,MG,DROPPED,11 trailing NaN(s) — cannot interpolate without anchor,97,11,0,11,0
+BATATA,MS,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,MT,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,PA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+BATATA,PB,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+BATATA,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+BATATA,PI,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+BATATA,PR,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+BATATA,RJ,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,92,16,0,15,0
+BATATA,RN,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,RO,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+BATATA,RR,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,RS,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,SC,DROPPED,14 leading NaN(s); 14 trailing NaN(s) — cannot interpolate without anchor,79,29,14,14,0
+BATATA,SE,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+BATATA,SP,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+BATATA,TO,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,90,18,0,15,0
+CAFÉ,AC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CAFÉ,AL,DROPPED,9 leading NaN(s) — cannot interpolate without anchor,99,9,9,0,0
+CAFÉ,AM,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CAFÉ,AP,KEPT_AS_IS,no missing values,108,0,0,0,0
+CAFÉ,BA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CAFÉ,CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,DF,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+CAFÉ,MA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,MG,KEPT_AS_IS,no missing values,108,0,0,0,0
+CAFÉ,MS,DROPPED,104 leading NaN(s) — cannot interpolate without anchor,4,104,104,0,0
+CAFÉ,MT,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,PA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,PI,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CAFÉ,PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+CAFÉ,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+CAFÉ,RN,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+CAFÉ,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+CAFÉ,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+CAFÉ,SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CAFÉ,SP,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+CAFÉ,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE BOVINA,AC,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+CARNE BOVINA,AL,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,AM,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,AP,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,91,17,0,14,0
+CARNE BOVINA,BA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,CE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE BOVINA,DF,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CARNE BOVINA,ES,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE BOVINA,GO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE BOVINA,MA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,MG,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,87,21,0,14,0
+CARNE BOVINA,MS,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE BOVINA,MT,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,PA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,PB,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE BOVINA,PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+CARNE BOVINA,PI,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CARNE BOVINA,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE BOVINA,RJ,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,93,15,0,14,0
+CARNE BOVINA,RN,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,RO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,85,23,0,14,0
+CARNE BOVINA,RR,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,RS,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,92,16,0,14,0
+CARNE BOVINA,SC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE BOVINA,SE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE BOVINA,SP,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+CARNE BOVINA,TO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,90,18,0,14,0
+CARNE FRANGO,AC,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+CARNE FRANGO,AL,DROPPED,9 leading NaN(s); 14 trailing NaN(s) — cannot interpolate without anchor,81,27,9,14,0
+CARNE FRANGO,AM,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,AP,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,BA,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE FRANGO,CE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,DF,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CARNE FRANGO,ES,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,GO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,MA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE FRANGO,MG,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+CARNE FRANGO,MS,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,MT,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,PA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,PB,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE FRANGO,PI,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CARNE FRANGO,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE FRANGO,RJ,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,93,15,0,14,0
+CARNE FRANGO,RN,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE FRANGO,RO,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE FRANGO,RR,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+CARNE FRANGO,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+CARNE FRANGO,SC,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,92,16,0,14,0
+CARNE FRANGO,SE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,93,15,0,14,0
+CARNE FRANGO,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+CARNE FRANGO,TO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,AC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE SUINA,AL,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE SUINA,AM,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE SUINA,AP,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE SUINA,BA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE SUINA,CE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,DF,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CARNE SUINA,ES,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,GO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,91,17,0,14,0
+CARNE SUINA,MA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,MG,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,91,17,0,14,0
+CARNE SUINA,MS,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,MT,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,PA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,PB,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,89,19,0,14,0
+CARNE SUINA,PE,DROPPED,100 trailing NaN(s) — cannot interpolate without anchor,8,100,0,100,0
+CARNE SUINA,PI,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CARNE SUINA,PR,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,RJ,DROPPED,48 trailing NaN(s) — cannot interpolate without anchor,58,50,0,48,0
+CARNE SUINA,RN,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CARNE SUINA,RO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,84,24,0,14,0
+CARNE SUINA,RR,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+CARNE SUINA,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+CARNE SUINA,SC,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,93,15,0,14,0
+CARNE SUINA,SE,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+CARNE SUINA,SP,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,92,16,0,14,0
+CARNE SUINA,TO,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,69,39,0,14,0
+CEBOLA,AC,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+CEBOLA,AL,DROPPED,9 leading NaN(s) — cannot interpolate without anchor,99,9,9,0,0
+CEBOLA,AM,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+CEBOLA,AP,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,BA,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,CE,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,ES,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,MA,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,MG,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,MS,INTERPOLATED,10 interior gap(s) filled via linear interpolation,98,10,0,0,10
+CEBOLA,MT,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,PB,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,PI,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+CEBOLA,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+CEBOLA,RN,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,RO,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+CEBOLA,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+CEBOLA,SE,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+CEBOLA,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+EXTRATO DE TOMATE,AC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,AL,DROPPED,12 leading NaN(s) — cannot interpolate without anchor,96,12,12,0,0
+EXTRATO DE TOMATE,AM,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,AP,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,BA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+EXTRATO DE TOMATE,DF,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,ES,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+EXTRATO DE TOMATE,MA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,100,8,2,0,0
+EXTRATO DE TOMATE,MG,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,MS,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,MT,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,100,8,2,0,0
+EXTRATO DE TOMATE,PA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+EXTRATO DE TOMATE,PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+EXTRATO DE TOMATE,PI,DROPPED,94 leading NaN(s) — cannot interpolate without anchor,14,94,94,0,0
+EXTRATO DE TOMATE,PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+EXTRATO DE TOMATE,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+EXTRATO DE TOMATE,RN,DROPPED,6 leading NaN(s) — cannot interpolate without anchor,102,6,6,0,0
+EXTRATO DE TOMATE,RO,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,RR,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+EXTRATO DE TOMATE,SC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+EXTRATO DE TOMATE,SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+EXTRATO DE TOMATE,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+EXTRATO DE TOMATE,TO,DROPPED,12 trailing NaN(s) — cannot interpolate without anchor,96,12,0,12,0
+FARINHA MANDIOCA,AC,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA MANDIOCA,AL,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FARINHA MANDIOCA,AM,DROPPED,3 leading NaN(s) — cannot interpolate without anchor,105,3,3,0,0
+FARINHA MANDIOCA,AP,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA MANDIOCA,BA,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+FARINHA MANDIOCA,CE,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FARINHA MANDIOCA,DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA MANDIOCA,ES,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA MANDIOCA,GO,INTERPOLATED,57 interior gap(s) filled via linear interpolation,51,57,0,0,57
+FARINHA MANDIOCA,MA,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+FARINHA MANDIOCA,MG,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA MANDIOCA,MS,DROPPED,13 leading NaN(s); 3 trailing NaN(s) — cannot interpolate without anchor,92,16,13,3,0
+FARINHA MANDIOCA,MT,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA MANDIOCA,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA MANDIOCA,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FARINHA MANDIOCA,PE,DROPPED,10 leading NaN(s) — cannot interpolate without anchor,98,10,10,0,0
+FARINHA MANDIOCA,PI,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA MANDIOCA,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA MANDIOCA,RJ,INTERPOLATED,3 interior gap(s) filled via linear interpolation,105,3,0,0,3
+FARINHA MANDIOCA,RN,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FARINHA MANDIOCA,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FARINHA MANDIOCA,RR,INTERPOLATED,26 interior gap(s) filled via linear interpolation,82,26,0,0,26
+FARINHA MANDIOCA,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+FARINHA MANDIOCA,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FARINHA MANDIOCA,SE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA MANDIOCA,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA MANDIOCA,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,AC,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,AL,DROPPED,9 leading NaN(s) — cannot interpolate without anchor,99,9,9,0,0
+FARINHA TRIGO,AM,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+FARINHA TRIGO,AP,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,BA,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,CE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FARINHA TRIGO,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,MA,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+FARINHA TRIGO,MG,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA TRIGO,MS,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,MT,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FARINHA TRIGO,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FARINHA TRIGO,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,PI,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,RJ,INTERPOLATED,3 interior gap(s) filled via linear interpolation,105,3,0,0,3
+FARINHA TRIGO,RN,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,RO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+FARINHA TRIGO,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FARINHA TRIGO,SE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+FARINHA TRIGO,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,AC,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,AL,DROPPED,9 leading NaN(s) — cannot interpolate without anchor,99,9,9,0,0
+FEIJAO,AM,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+FEIJAO,AP,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FEIJAO,BA,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,CE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,ES,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,MA,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FEIJAO,MG,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,MS,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,MT,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,PB,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+FEIJAO,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,PI,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FEIJAO,RN,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,RO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,RR,DROPPED,25 leading NaN(s) — cannot interpolate without anchor,83,25,25,0,0
+FEIJAO,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+FEIJAO,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FEIJAO,SE,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+FEIJAO,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FLOCOS DE MILHO,AC,DROPPED,8 trailing NaN(s) — cannot interpolate without anchor,100,8,0,8,0
+FLOCOS DE MILHO,AL,DROPPED,12 leading NaN(s) — cannot interpolate without anchor,96,12,12,0,0
+FLOCOS DE MILHO,AM,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FLOCOS DE MILHO,AP,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FLOCOS DE MILHO,BA,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FLOCOS DE MILHO,CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,DF,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FLOCOS DE MILHO,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FLOCOS DE MILHO,MA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,MG,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,48,60,59,0,0
+FLOCOS DE MILHO,MS,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FLOCOS DE MILHO,MT,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,57,51,2,0,0
+FLOCOS DE MILHO,PA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,PI,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FLOCOS DE MILHO,PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,104,4,1,0,0
+FLOCOS DE MILHO,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FLOCOS DE MILHO,RN,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FLOCOS DE MILHO,RR,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FLOCOS DE MILHO,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+FLOCOS DE MILHO,SC,DROPPED,57 leading NaN(s) — cannot interpolate without anchor,51,57,57,0,0
+FLOCOS DE MILHO,SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,103,5,2,0,0
+FLOCOS DE MILHO,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+FLOCOS DE MILHO,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FUBA,AC,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FUBA,AL,DROPPED,10 leading NaN(s) — cannot interpolate without anchor,97,11,10,0,0
+FUBA,AM,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,48,60,58,0,0
+FUBA,AP,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,42,66,59,0,0
+FUBA,BA,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+FUBA,CE,DROPPED,2 leading NaN(s); 4 trailing NaN(s) — cannot interpolate without anchor,102,6,2,4,0
+FUBA,DF,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FUBA,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FUBA,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+FUBA,MA,DROPPED,59 leading NaN(s); 5 trailing NaN(s) — cannot interpolate without anchor,44,64,59,5,0
+FUBA,MG,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FUBA,MS,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FUBA,MT,INTERPOLATED,6 interior gap(s) filled via linear interpolation,102,6,0,0,6
+FUBA,PA,DROPPED,3 leading NaN(s) — cannot interpolate without anchor,105,3,3,0,0
+FUBA,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,92,16,2,0,0
+FUBA,PE,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+FUBA,PI,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,43,65,59,0,0
+FUBA,PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+FUBA,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+FUBA,RN,DROPPED,2 leading NaN(s); 11 trailing NaN(s) — cannot interpolate without anchor,56,52,2,11,0
+FUBA,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+FUBA,RR,DROPPED,58 leading NaN(s); 7 trailing NaN(s) — cannot interpolate without anchor,43,65,58,7,0
+FUBA,RS,INTERPOLATED,56 interior gap(s) filled via linear interpolation,52,56,0,0,56
+FUBA,SC,DROPPED,57 leading NaN(s) — cannot interpolate without anchor,51,57,57,0,0
+FUBA,SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,105,3,2,0,0
+FUBA,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+FUBA,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,AC,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,AL,DROPPED,11 leading NaN(s) — cannot interpolate without anchor,97,11,11,0,0
+LEITE,AM,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+LEITE,AP,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,BA,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,CE,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,ES,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,MA,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,MG,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,MS,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,MT,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,PB,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,PE,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,PI,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+LEITE,RN,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,RO,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+LEITE,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+LEITE,SE,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+LEITE,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,AC,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,AL,DROPPED,10 leading NaN(s) — cannot interpolate without anchor,98,10,10,0,0
+MACARRAO,AM,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+MACARRAO,AP,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,BA,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+MACARRAO,CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,MA,DROPPED,59 leading NaN(s); 1 trailing NaN(s) — cannot interpolate without anchor,48,60,59,1,0
+MACARRAO,MG,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,105,3,2,0,0
+MACARRAO,MS,DROPPED,3 trailing NaN(s) — cannot interpolate without anchor,105,3,0,3,0
+MACARRAO,MT,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,PA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,PE,DROPPED,59 leading NaN(s) — cannot interpolate without anchor,49,59,59,0,0
+MACARRAO,PI,DROPPED,6 trailing NaN(s) — cannot interpolate without anchor,102,6,0,6,0
+MACARRAO,PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+MACARRAO,RN,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+MACARRAO,SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+MACARRAO,SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+MACARRAO,SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+MACARRAO,TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),AC,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+OLEO DE SOJA (900 ml),AL,DROPPED,10 leading NaN(s) — cannot interpolate without anchor,95,13,10,0,0
+OLEO DE SOJA (900 ml),AM,DROPPED,58 leading NaN(s) — cannot interpolate without anchor,50,58,58,0,0
+OLEO DE SOJA (900 ml),AP,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),BA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),DF,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),MA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),MG,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),MS,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),MT,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),PA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),PI,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+OLEO DE SOJA (900 ml),RN,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),RO,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),RS,INTERPOLATED,64 interior gap(s) filled via linear interpolation,44,64,0,0,64
+OLEO DE SOJA (900 ml),SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+OLEO DE SOJA (900 ml),SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+OLEO DE SOJA (900 ml),SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+OLEO DE SOJA (900 ml),TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),AC,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),AL,DROPPED,9 leading NaN(s) — cannot interpolate without anchor,95,13,9,0,0
+PÃO FRANCÊS   (kg),AM,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+PÃO FRANCÊS   (kg),AP,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+PÃO FRANCÊS   (kg),BA,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),CE,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),DF,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),ES,DROPPED,4 trailing NaN(s) — cannot interpolate without anchor,90,18,0,4,0
+PÃO FRANCÊS   (kg),GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),MA,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),MG,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),MS,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),MT,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+PÃO FRANCÊS   (kg),PA,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),PB,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),PE,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+PÃO FRANCÊS   (kg),PI,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),PR,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+PÃO FRANCÊS   (kg),RN,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),RO,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),RR,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),RS,INTERPOLATED,2 interior gap(s) filled via linear interpolation,106,2,0,0,2
+PÃO FRANCÊS   (kg),SC,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+PÃO FRANCÊS   (kg),SE,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+PÃO FRANCÊS   (kg),SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+PÃO FRANCÊS   (kg),TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+SAL    (kg),AC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),AL,DROPPED,12 leading NaN(s) — cannot interpolate without anchor,96,12,12,0,0
+SAL    (kg),AM,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),AP,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),BA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),CE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+SAL    (kg),DF,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),ES,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+SAL    (kg),GO,KEPT_AS_IS,no missing values,108,0,0,0,0
+SAL    (kg),MA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,101,7,2,0,0
+SAL    (kg),MG,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),MS,DROPPED,104 leading NaN(s) — cannot interpolate without anchor,4,104,104,0,0
+SAL    (kg),MT,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,105,3,2,0,0
+SAL    (kg),PA,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+SAL    (kg),PB,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+SAL    (kg),PE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+SAL    (kg),PI,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),PR,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+SAL    (kg),RJ,INTERPOLATED,1 interior gap(s) filled via linear interpolation,107,1,0,0,1
+SAL    (kg),RN,DROPPED,6 leading NaN(s) — cannot interpolate without anchor,102,6,6,0,0
+SAL    (kg),RO,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),RR,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),RS,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),SC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+SAL    (kg),SE,DROPPED,2 leading NaN(s) — cannot interpolate without anchor,106,2,2,0,0
+SAL    (kg),SP,KEPT_AS_IS,no missing values,108,0,0,0,0
+SAL    (kg),TO,KEPT_AS_IS,no missing values,108,0,0,0,0
+Tomate,AC,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,AL,DROPPED,9 leading NaN(s); 14 trailing NaN(s) — cannot interpolate without anchor,81,27,9,14,0
+Tomate,AM,DROPPED,1 leading NaN(s) — cannot interpolate without anchor,107,1,1,0,0
+Tomate,AP,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,BA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+Tomate,CE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+Tomate,DF,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+Tomate,ES,DROPPED,3 trailing NaN(s) — cannot interpolate without anchor,105,3,0,3,0
+Tomate,GO,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+Tomate,MA,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,MG,DROPPED,11 trailing NaN(s) — cannot interpolate without anchor,97,11,0,11,0
+Tomate,MS,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+Tomate,MT,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,PA,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+Tomate,PB,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+Tomate,PE,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,PI,DROPPED,13 trailing NaN(s) — cannot interpolate without anchor,95,13,0,13,0
+Tomate,PR,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,94,14,0,14,0
+Tomate,RJ,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,92,16,0,15,0
+Tomate,RN,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,RO,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+Tomate,RR,DROPPED,fully missing (0 valid observations),0,108,108,0,0
+Tomate,RS,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,92,16,0,14,0
+Tomate,SC,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,93,15,0,14,0
+Tomate,SE,DROPPED,14 trailing NaN(s) — cannot interpolate without anchor,93,15,0,14,0
+Tomate,SP,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,93,15,0,15,0
+Tomate,TO,DROPPED,15 trailing NaN(s) — cannot interpolate without anchor,92,16,0,15,0
