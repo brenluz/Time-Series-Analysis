@@ -222,7 +222,6 @@ def sliding_rmse_boxplots(
     for r in range(n_rows):
         s_start = r * steps_per_row + 1
         s_end   = min((r + 1) * steps_per_row, test_periods)
-        row_titles.append(f"Steps {s_start} - {s_end}")
 
     fig = make_subplots(
         rows=n_rows, cols=1,
