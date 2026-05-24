@@ -4,7 +4,7 @@ import pandas as pd
 todos_os_dfs = []
 
 # Nomes dos seus arquivos Excel
-nomes_dos_arquivos = ['Consulta-precos-mensal.xlsx', 'Consulta-precos-mensal (1).xlsx', 'Consulta-precos-mensal (2).xlsx']
+nomes_dos_arquivos = ["Consulta_2025.xlsx"]
 
 cabecalho = 10
 
@@ -24,7 +24,7 @@ for arquivo in nomes_dos_arquivos:
 df_final = pd.concat(todos_os_dfs, ignore_index=True)
 
 # Salvar o DataFrame combinado em um novo arquivo Excel
-df_final.to_excel('Database.xlsx', index=False)
+df_final.to_excel('Database2025.xlsx', index=False)
 
 print("\nPlanilhas combinadas com sucesso!")
 print("As primeiras 5 linhas do DataFrame combinado:")

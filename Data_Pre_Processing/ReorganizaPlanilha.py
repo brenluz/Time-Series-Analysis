@@ -62,7 +62,7 @@ def create_detailed_pivot_table_from_excel(file_path):
         return None
 
 
-file = '../Databases/Database.xlsx'
+file = '../Databases/Consulta_2025.xlsx'
 
 # Run the function and store the result
 pivoted_data = create_detailed_pivot_table_from_excel(file)

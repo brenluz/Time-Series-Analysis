@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np
-from datetime import date, timedelta
-
 
 def process_avg_prices_data(input_excel_path, output_excel_path):
     """
@@ -45,8 +43,8 @@ def process_avg_prices_data(input_excel_path, output_excel_path):
                             var_name='Product', value_name='Price')
 
         # --- 4. Create a complete date range for the new sheets ---
-        start_date = '2014-01-01'
-        end_date = '2024-12-31'
+        start_date = '2024-12-31'
+        end_date = '2025-12-31'
         full_date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
         full_date_range_str = full_date_range.strftime('%Y-%m')
 
@@ -86,8 +84,8 @@ def process_avg_prices_data(input_excel_path, output_excel_path):
 # --- Main execution ---
 if __name__ == "__main__":
     # Define the input and output file paths.
-    input_file = "../Databases/DatabaseConabv2.xlsx"
-    output_file = "../Databases/DatabaseConabv4.xlsx"
+    input_file = "../Databases/Consulta_2025_pivotada.xlsx"
+    output_file = "../Databases/Database2025.xlsx"
 
     # Call the function to perform the data transformation.
     process_avg_prices_data(input_file, output_file)
