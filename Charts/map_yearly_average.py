@@ -108,8 +108,6 @@ def generate_yearly_grid_map(df_wide, product_name, value_name):
         )
 
     fig.update_layout(
-        title_text=f"Média Anual de Preços: {product_name}",
-        title_x=0.5,
         height=rows * 330,
         width=1200,
         coloraxis=dict(
@@ -166,8 +164,8 @@ if __name__ == "__main__":
                 value_name=VALUE_LABEL
             )
 
-            out_path = os.path.join(OUTPUT_DIR, f"{safe_filename(sheet)}.png")
-            fig.write_image(out_path, scale=2)  # scale=2 para alta resolução
+            out_path = os.path.join(OUTPUT_DIR, f"{safe_filename(sheet)}.html")
+            fig.write_html(out_path)
             print(f"  [OK] Salvo em: {os.path.abspath(out_path)}\n")
 
         except Exception as e:
@@ -180,4 +178,4 @@ if __name__ == "__main__":
     print(f"Concluído. {len(sheet_names) - len(failed)}/{len(sheet_names)} produtos gerados.")
     if failed:
         print(f"Falhas: {failed}")
-    print(f"PNGs salvos em: {os.path.abspath(OUTPUT_DIR)}")
+    print(f"HTMLs salvos em: {os.path.abspath(OUTPUT_DIR)}")
