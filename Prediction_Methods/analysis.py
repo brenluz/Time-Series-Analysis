@@ -225,7 +225,6 @@ def sliding_rmse_boxplots(
 
     fig = make_subplots(
         rows=n_rows, cols=1,
-        subplot_titles=row_titles,
         vertical_spacing=0.03,
         shared_yaxes=True,
     )
