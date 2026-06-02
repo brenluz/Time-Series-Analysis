@@ -1,205 +1,359 @@
 """
-map_brazil_best_model.py
-Produces: map_brazil_best_model.png  (publication figure)
-          map_brazil_best_model.html (interactive version)
+models.py
+---------
+PyTorch model architectures used for time-series forecasting.
 
-For a chosen commodity, colours each Brazilian state by the best-performing
-model (lowest mean RMSE across h=1..12). Uses embedded simplified state
-polygon GeoJSON — no network dependency required.
+Models
+------
+LSTMModel             : 2-layer stacked LSTM
+GRUModel              : 2-layer stacked GRU
+PositionalEncoding    : Sinusoidal positional encoding (shared)
+TimeSeriesTransformer : Vanilla Transformer encoder
+Informer              : Full encoder-decoder Informer with ProbSparse attention
+                        (Zhou et al., 2021)
 """
 
-import pandas as pd
-import numpy as np
-import json
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.colors import ListedColormap
-import matplotlib.patheffects as pe
-from shapely.geometry import shape, Point
-import geopandas as gpd
+import math
 
-FILE      = "sliding_rmse_all_products.xlsx"
-COMMODITY = "FEIJAO"          # ← change to any sheet name
-OUT_PNG   = f"map_brazil_best_model_{COMMODITY.lower()}.png"
-OUT_HTML  = f"map_brazil_best_model_{COMMODITY.lower()}.html"
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
 
-MODELS = ['ARIMA', 'ETS', 'Prophet', 'Random Forest',
-          'LSTM', 'GRU', 'Transformer', 'Informer']
 
-# Model colour palette (colourblind-friendly)
-MODEL_COLORS = {
-    'ARIMA':          '#4472C4',   # blue
-    'ETS':            '#ED7D31',   # orange
-    'Prophet':        '#A9D18E',   # green
-    'Random Forest':  '#FFC000',   # amber
-    'LSTM':           '#FF0000',   # red
-    'GRU':            '#00B0F0',   # cyan
-    'Transformer':    '#7030A0',   # purple
-    'Informer':       '#FF69B4',   # pink
-}
+# ===========================================================================
+# LSTM
+# ===========================================================================
 
-# ── 1. Load & aggregate per state ─────────────────────────────────────────────
-df        = pd.read_excel(FILE, sheet_name=COMMODITY, header=None)
-model_row = df.iloc[0].tolist()
-data      = df.iloc[2:].copy()
-data.columns = range(data.shape[1])
-data      = data[data[0].notna()].reset_index(drop=True)
-data      = data.rename(columns={0: 'State'})
+class LSTMModel(nn.Module):
+    """2-layer stacked LSTM. Input: [batch, seq_len, 1]. Output: [batch]."""
 
-state_results = {}
-for _, row in data.iterrows():
-    state = row['State']
-    rmse_per_model = {}
-    for model in MODELS:
-        cols = [i for i, v in enumerate(model_row) if v == model]
-        vals = pd.to_numeric(row[cols], errors='coerce').values
-        rmse_per_model[model] = np.nanmean(vals)
-    state_results[state] = rmse_per_model
+    def __init__(self, input_size: int = 1, hidden_layer_size: int = 64, output_size: int = 1):
+        super().__init__()
+        self.lstm   = nn.LSTM(input_size, hidden_layer_size,
+                              num_layers=2, batch_first=True, dropout=0.1)
+        self.linear = nn.Linear(hidden_layer_size, output_size)
 
-state_best  = {s: min(v, key=v.get)       for s, v in state_results.items()}
-state_rmse  = {s: min(v.values())          for s, v in state_results.items()}
+    def forward(self, x: Tensor) -> Tensor:
+        out, _ = self.lstm(x)
+        return self.linear(out[:, -1, :]).squeeze(1)
 
-# ── 2. Embedded Brazil states GeoJSON (simplified polygons, public domain) ────
-# Coordinates derived from IBGE/OpenStreetMap public domain data.
-# Sufficient accuracy for academic choropleth figures.
-BRAZIL_GEOJSON = {
-  "type": "FeatureCollection",
-  "features": [
-    {"type":"Feature","properties":{"abbrev":"AC"},"geometry":{"type":"Polygon","coordinates":[[[-73.99,-7.34],[-73.79,-9.79],[-72.18,-10.93],[-70.64,-11.01],[-68.77,-11.03],[-68.74,-9.97],[-67.82,-10.69],[-67.33,-10.26],[-65.30,-9.77],[-65.38,-7.63],[-66.65,-6.87],[-67.93,-6.88],[-70.39,-6.79],[-72.31,-5.29],[-73.99,-7.34]]]}},
-    {"type":"Feature","properties":{"abbrev":"AL"},"geometry":{"type":"Polygon","coordinates":[[[-35.59,-8.86],[-35.17,-8.39],[-35.46,-9.02],[-36.38,-10.35],[-37.88,-9.80],[-38.23,-9.42],[-37.52,-9.08],[-36.92,-8.51],[-36.07,-8.28],[-35.59,-8.86]]]}},
-    {"type":"Feature","properties":{"abbrev":"AM"},"geometry":{"type":"Polygon","coordinates":[[[-73.99,-7.34],[-72.31,-5.29],[-70.39,-6.79],[-67.93,-6.88],[-66.65,-6.87],[-65.38,-7.63],[-63.15,-7.96],[-61.52,-8.78],[-60.19,-8.84],[-60.25,-7.82],[-59.10,-7.19],[-58.12,-6.34],[-58.49,-4.08],[-57.38,-3.23],[-57.86,-1.62],[-59.06,-0.13],[-59.98, 0.76],[-61.54, 0.95],[-63.19, 1.95],[-63.58, 0.73],[-65.06, 1.08],[-66.87, 1.22],[-69.42, 1.23],[-70.02,-4.30],[-72.89,-2.79],[-73.43,-6.02],[-73.99,-7.34]]]}},
-    {"type":"Feature","properties":{"abbrev":"AP"},"geometry":{"type":"Polygon","coordinates":[[[-52.36, 4.20],[-51.61, 4.04],[-50.79, 1.76],[-51.22, 1.03],[-52.10, 0.22],[-53.48, 0.55],[-54.27, 1.86],[-54.04, 2.60],[-52.70, 3.55],[-52.36, 4.20]]]}},
-    {"type":"Feature","properties":{"abbrev":"BA"},"geometry":{"type":"Polygon","coordinates":[[[-38.23,-9.42],[-37.88,-9.80],[-36.38,-10.35],[-35.46,-9.02],[-35.17,-8.39],[-37.26,-10.89],[-37.56,-12.57],[-38.00,-12.95],[-38.81,-14.25],[-40.27,-14.96],[-39.98,-17.01],[-40.94,-17.83],[-41.57,-18.79],[-41.50,-20.00],[-44.50,-17.89],[-46.00,-16.12],[-46.50,-15.00],[-46.00,-12.09],[-45.74,-11.55],[-45.00,-9.52],[-43.85,-9.01],[-42.63,-8.60],[-40.81,-8.38],[-40.70,-9.45],[-39.24,-8.63],[-38.23,-9.42]]]}},
-    {"type":"Feature","properties":{"abbrev":"CE"},"geometry":{"type":"Polygon","coordinates":[[[-40.54,-2.79],[-40.98,-2.79],[-41.45,-3.97],[-41.88,-4.05],[-41.84,-5.26],[-40.79,-6.43],[-39.23,-7.14],[-38.66,-7.03],[-38.40,-6.21],[-37.68,-5.06],[-37.25,-4.76],[-36.49,-4.97],[-37.00,-3.87],[-37.66,-3.17],[-38.47,-2.88],[-38.69,-3.44],[-40.54,-2.79]]]}},
-    {"type":"Feature","properties":{"abbrev":"DF"},"geometry":{"type":"Polygon","coordinates":[[[-48.30,-15.50],[-48.30,-16.05],[-47.30,-16.05],[-47.30,-15.50],[-48.30,-15.50]]]}},
-    {"type":"Feature","properties":{"abbrev":"ES"},"geometry":{"type":"Polygon","coordinates":[[[-39.68,-17.88],[-39.98,-17.01],[-40.27,-14.96],[-40.98,-14.81],[-41.06,-15.73],[-41.38,-17.43],[-40.70,-18.39],[-40.25,-19.54],[-40.88,-21.04],[-41.95,-20.98],[-41.79,-20.47],[-40.70,-19.63],[-39.68,-17.88]]]}},
-    {"type":"Feature","properties":{"abbrev":"GO"},"geometry":{"type":"Polygon","coordinates":[[[-46.50,-15.00],[-46.00,-16.12],[-44.50,-17.89],[-46.50,-19.00],[-47.50,-18.50],[-48.50,-18.50],[-51.50,-18.00],[-52.50,-16.50],[-52.00,-14.50],[-50.00,-13.00],[-49.00,-13.00],[-48.00,-13.00],[-46.50,-13.00],[-46.50,-15.00]]]}},
-    {"type":"Feature","properties":{"abbrev":"MA"},"geometry":{"type":"Polygon","coordinates":[[[-44.65,-1.06],[-44.43,-2.55],[-43.55,-2.13],[-42.79,-2.82],[-41.84,-5.26],[-41.88,-4.05],[-41.45,-3.97],[-40.98,-2.79],[-44.00,-2.50],[-44.65,-1.06]]]}},
-    {"type":"Feature","properties":{"abbrev":"MG"},"geometry":{"type":"Polygon","coordinates":[[[-44.50,-17.89],[-41.50,-20.00],[-41.57,-18.79],[-40.94,-17.83],[-39.98,-17.01],[-39.68,-17.88],[-40.70,-19.63],[-41.79,-20.47],[-41.95,-20.98],[-43.50,-22.90],[-44.50,-22.90],[-45.52,-23.19],[-46.00,-22.50],[-47.20,-22.50],[-48.70,-22.10],[-50.00,-22.30],[-51.50,-21.50],[-51.60,-19.50],[-51.50,-18.00],[-48.50,-18.50],[-47.50,-18.50],[-46.50,-19.00],[-44.50,-17.89]]]}},
-    {"type":"Feature","properties":{"abbrev":"MS"},"geometry":{"type":"Polygon","coordinates":[[[-51.50,-18.00],[-52.50,-16.50],[-57.50,-16.00],[-58.16,-16.30],[-58.00,-17.50],[-57.50,-19.00],[-57.89,-19.96],[-57.50,-22.00],[-55.65,-22.09],[-54.29,-23.65],[-53.64,-23.60],[-52.80,-22.50],[-51.50,-21.50],[-50.00,-22.30],[-51.50,-21.50],[-51.60,-19.50],[-51.50,-18.00]]]}},
-    {"type":"Feature","properties":{"abbrev":"MT"},"geometry":{"type":"Polygon","coordinates":[[[-52.50,-16.50],[-52.00,-14.50],[-50.00,-13.00],[-52.50,-10.00],[-54.00,-8.50],[-57.50,-8.00],[-58.50,-8.50],[-60.25,-7.82],[-60.19,-8.84],[-61.52,-8.78],[-63.15,-7.96],[-65.38,-7.63],[-65.30,-9.77],[-63.00,-10.00],[-61.50,-12.00],[-60.50,-13.00],[-59.00,-15.00],[-58.16,-16.30],[-57.50,-16.00],[-52.50,-16.50]]]}},
-    {"type":"Feature","properties":{"abbrev":"PA"},"geometry":{"type":"Polygon","coordinates":[[[-59.98, 0.76],[-59.06,-0.13],[-57.86,-1.62],[-57.38,-3.23],[-58.49,-4.08],[-58.12,-6.34],[-59.10,-7.19],[-60.25,-7.82],[-58.50,-8.50],[-57.50,-8.00],[-54.00,-8.50],[-52.50,-10.00],[-50.00,-13.00],[-49.00,-13.00],[-48.00,-13.00],[-48.00,-11.00],[-46.50,-8.00],[-48.50,-5.50],[-48.50,-4.00],[-49.00,-2.00],[-50.50,-1.00],[-51.00, 0.00],[-52.10, 0.22],[-51.22, 1.03],[-50.79, 1.76],[-51.61, 4.04],[-52.36, 4.20],[-52.70, 3.55],[-53.80, 2.20],[-54.27, 1.86],[-53.48, 0.55],[-52.10, 0.22],[-50.50,-1.00],[-49.00,-2.00],[-48.50,-4.00],[-48.50,-5.50],[-46.50,-8.00],[-48.00,-11.00],[-48.00,-13.00],[-50.00,-13.00],[-52.00,-14.50],[-52.50,-16.50],[-57.50,-16.00],[-58.16,-16.30],[-59.00,-15.00],[-60.50,-13.00],[-61.50,-12.00],[-63.00,-10.00],[-65.38,-7.63],[-65.30,-9.77],[-63.15,-7.96],[-61.52,-8.78],[-60.19,-8.84],[-60.25,-7.82],[-59.10,-7.19],[-58.12,-6.34],[-58.49,-4.08],[-57.38,-3.23],[-57.86,-1.62],[-57.38,-3.23],[-55.00,-1.80],[-54.27, 1.86],[-53.48, 0.55],[-52.10, 0.22],[-51.00, 0.00],[-50.50,-1.00],[-49.00,-2.00],[-48.50,-4.00],[-48.50,-5.50],[-46.50,-8.00],[-48.00,-11.00],[-48.00,-13.00],[-49.00,-13.00],[-50.00,-13.00],[-59.98, 0.76]]]}},
-    {"type":"Feature","properties":{"abbrev":"PE"},"geometry":{"type":"Polygon","coordinates":[[[-40.81,-8.38],[-42.63,-8.60],[-43.85,-9.01],[-45.00,-9.52],[-38.85,-7.37],[-35.56,-7.89],[-34.80,-7.35],[-35.17,-8.39],[-35.59,-8.86],[-36.07,-8.28],[-36.92,-8.51],[-37.52,-9.08],[-38.23,-9.42],[-39.24,-8.63],[-40.70,-9.45],[-40.81,-8.38]]]}},
-    {"type":"Feature","properties":{"abbrev":"PI"},"geometry":{"type":"Polygon","coordinates":[[[-41.84,-5.26],[-42.79,-2.82],[-43.55,-2.13],[-44.43,-2.55],[-45.00,-3.00],[-44.50,-5.50],[-43.50,-7.00],[-42.63,-8.60],[-40.81,-8.38],[-40.70,-9.45],[-39.24,-8.63],[-38.23,-9.42],[-38.40,-6.21],[-38.66,-7.03],[-39.23,-7.14],[-40.79,-6.43],[-41.84,-5.26]]]}},
-    {"type":"Feature","properties":{"abbrev":"PR"},"geometry":{"type":"Polygon","coordinates":[[[-48.00,-24.00],[-48.80,-26.40],[-49.57,-25.37],[-50.00,-26.50],[-51.50,-25.50],[-53.00,-25.50],[-54.50,-24.00],[-54.50,-26.50],[-53.50,-33.00],[-52.80,-22.50],[-53.64,-23.60],[-54.29,-23.65],[-55.65,-22.09],[-54.50,-24.00],[-53.00,-25.50],[-51.50,-25.50],[-50.00,-26.50],[-49.57,-25.37],[-48.80,-26.40],[-48.00,-24.00]]]}},
-    {"type":"Feature","properties":{"abbrev":"RJ"},"geometry":{"type":"Polygon","coordinates":[[[-43.50,-22.90],[-41.95,-20.98],[-40.88,-21.04],[-40.25,-19.54],[-40.70,-18.39],[-41.38,-17.43],[-41.80,-20.90],[-43.50,-22.90],[-44.50,-22.90],[-43.50,-22.90]]]}},
-    {"type":"Feature","properties":{"abbrev":"RN"},"geometry":{"type":"Polygon","coordinates":[[[-35.46,-9.02],[-35.17,-8.39],[-34.80,-7.35],[-35.56,-7.89],[-37.25,-4.76],[-37.68,-5.06],[-38.40,-6.21],[-38.23,-9.42],[-37.52,-9.08],[-36.92,-8.51],[-36.07,-8.28],[-35.59,-8.86],[-35.46,-9.02]]]}},
-    {"type":"Feature","properties":{"abbrev":"RO"},"geometry":{"type":"Polygon","coordinates":[[[-65.38,-7.63],[-65.30,-9.77],[-67.82,-10.69],[-68.74,-9.97],[-68.77,-11.03],[-66.50,-13.00],[-65.00,-13.50],[-63.00,-13.00],[-61.50,-12.00],[-63.00,-10.00],[-65.38,-7.63]]]}},
-    {"type":"Feature","properties":{"abbrev":"RR"},"geometry":{"type":"Polygon","coordinates":[[[-63.19, 1.95],[-61.54, 0.95],[-59.98, 0.76],[-59.84, 2.44],[-60.20, 4.00],[-61.00, 4.50],[-62.00, 5.00],[-64.00, 4.00],[-64.50, 2.00],[-63.19, 1.95]]]}},
-    {"type":"Feature","properties":{"abbrev":"RS"},"geometry":{"type":"Polygon","coordinates":[[[-53.50,-33.00],[-51.20,-33.80],[-50.00,-32.00],[-49.50,-30.00],[-50.50,-28.00],[-51.50,-27.50],[-53.00,-27.00],[-55.00,-27.00],[-57.50,-22.00],[-57.89,-19.96],[-57.50,-19.00],[-56.00,-22.00],[-55.00,-27.00],[-53.00,-27.00],[-51.50,-27.50],[-50.50,-28.00],[-49.50,-30.00],[-50.00,-32.00],[-51.20,-33.80],[-53.50,-33.00]]]}},
-    {"type":"Feature","properties":{"abbrev":"SC"},"geometry":{"type":"Polygon","coordinates":[[[-48.80,-26.40],[-48.00,-24.00],[-51.50,-25.50],[-53.00,-25.50],[-54.50,-26.50],[-53.50,-33.00],[-54.50,-26.50],[-53.00,-27.00],[-51.50,-27.50],[-50.50,-28.00],[-49.50,-30.00],[-49.50,-28.50],[-49.57,-25.37],[-48.80,-26.40]]]}},
-    {"type":"Feature","properties":{"abbrev":"SE"},"geometry":{"type":"Polygon","coordinates":[[[-36.38,-10.35],[-37.56,-12.57],[-37.26,-10.89],[-35.17,-8.39],[-35.59,-8.86],[-36.07,-8.28],[-36.92,-8.51],[-37.52,-9.08],[-38.23,-9.42],[-37.88,-9.80],[-36.38,-10.35]]]}},
-    {"type":"Feature","properties":{"abbrev":"SP"},"geometry":{"type":"Polygon","coordinates":[[[-44.50,-22.90],[-43.50,-22.90],[-45.52,-23.19],[-46.00,-22.50],[-47.20,-22.50],[-48.70,-22.10],[-50.00,-22.30],[-51.50,-21.50],[-52.80,-22.50],[-53.64,-23.60],[-54.29,-23.65],[-53.50,-33.00],[-53.00,-27.00],[-55.00,-27.00],[-55.65,-22.09],[-57.50,-22.00],[-56.00,-22.00],[-55.65,-22.09],[-52.80,-22.50],[-50.00,-22.30],[-48.70,-22.10],[-47.20,-22.50],[-46.00,-22.50],[-45.52,-23.19],[-44.50,-22.90]]]}},
-    {"type":"Feature","properties":{"abbrev":"TO"},"geometry":{"type":"Polygon","coordinates":[[[-46.50,-8.00],[-48.00,-11.00],[-48.00,-13.00],[-46.50,-13.00],[-48.00,-13.00],[-50.00,-13.00],[-52.00,-14.50],[-52.50,-16.50],[-57.50,-16.00],[-59.00,-15.00],[-60.50,-13.00],[-61.50,-12.00],[-63.00,-13.00],[-65.00,-13.50],[-66.50,-13.00],[-63.00,-10.00],[-61.50,-12.00],[-60.50,-13.00],[-59.00,-15.00],[-57.50,-16.00],[-52.50,-16.50],[-52.00,-14.50],[-50.00,-13.00],[-49.00,-13.00],[-48.00,-13.00],[-48.00,-11.00],[-46.50,-8.00]]]}},
-    {"type":"Feature","properties":{"abbrev":"MA"},"geometry":{"type":"Polygon","coordinates":[[[-44.65,-1.06],[-43.55,-2.13],[-42.79,-2.82],[-41.84,-5.26],[-40.79,-6.43],[-41.84,-5.26],[-42.79,-2.82],[-43.55,-2.13],[-44.43,-2.55],[-44.65,-1.06],[-46.50,-3.00],[-46.50,-8.00],[-45.00,-9.52],[-45.74,-11.55],[-46.00,-12.09],[-46.50,-15.00],[-46.50,-13.00],[-48.00,-13.00],[-48.00,-11.00],[-46.50,-8.00],[-46.50,-3.00],[-44.65,-1.06]]]}}
-  ]
-}
 
-# ── 3. Build GeoDataFrame and merge with results ───────────────────────────────
-# Use plotly for the choropleth (more reliable than geopandas matplotlib for this)
-import plotly.express as px
-import plotly.graph_objects as go
+# ===========================================================================
+# GRU
+# ===========================================================================
 
-# Build data frame for plotting
-plot_data = []
-for state, best_model in state_best.items():
-    plot_data.append({
-        'state': state,
-        'best_model': best_model,
-        'min_rmse': round(state_rmse[state], 4),
-        'color': MODEL_COLORS[best_model]
-    })
-plot_df = pd.DataFrame(plot_data)
+class GRUModel(nn.Module):
+    """2-layer stacked GRU. Input: [batch, seq_len, 1]. Output: [batch]."""
 
-# State centroids for labels
-STATE_CENTROIDS = {
-    'AC': (-70.81, -9.02),  'AL': (-36.78, -9.57),  'AM': (-61.66, -3.07),
-    'AP': (-51.77,  1.41),  'BA': (-41.70,-12.97),  'CE': (-39.53, -5.20),
-    'DF': (-47.93,-15.78),  'ES': (-40.34,-19.19),  'GO': (-49.84,-15.83),
-    'MA': (-45.44, -5.42),  'MG': (-44.38,-18.10),  'MS': (-54.54,-20.51),
-    'MT': (-55.42,-12.64),  'PA': (-52.48, -3.79),  'PE': (-37.07, -8.28),
-    'PI': (-42.73, -7.72),  'PR': (-51.55,-24.89),  'RJ': (-43.17,-22.25),
-    'RN': (-36.59, -5.81),  'RO': (-63.34,-10.83),  'RR': (-61.33,  1.99),
-    'RS': (-51.21,-30.03),  'SC': (-50.22,-27.33),  'SE': (-37.45,-10.57),
-    'SP': (-48.55,-22.95),  'TO': (-48.33,-10.17),
-}
+    def __init__(self, input_size: int = 1, hidden_layer_size: int = 64, output_size: int = 1):
+        super().__init__()
+        self.gru    = nn.GRU(input_size, hidden_layer_size,
+                             num_layers=2, batch_first=True, dropout=0.1)
+        self.linear = nn.Linear(hidden_layer_size, output_size)
 
-# ── 4. Matplotlib figure ──────────────────────────────────────────────────────
-# Since polygon GeoJSON is complex, use scatter-based map with state labels
-# This is clean, readable, and publication-appropriate
+    def forward(self, x: Tensor) -> Tensor:
+        out, _ = self.gru(x)
+        return self.linear(out[:, -1, :]).squeeze(1)
 
-fig, ax = plt.subplots(1, 1, figsize=(10, 9), facecolor='white')
-ax.set_facecolor('#E8F4F8')
-ax.set_aspect('equal')
 
-# Draw Brazil outline approximation as background
-brazil_outline_lon = [-73.99,-34.80,-34.80,-53.50,-73.99]
-brazil_outline_lat = [  5.30,  5.30,-33.80, -33.80,  5.30]
+# ===========================================================================
+# Shared positional encoding
+# ===========================================================================
 
-# Plot each state as a circle scaled by RMSE, coloured by best model
-for _, row in plot_df.iterrows():
-    state = row['state']
-    if state not in STATE_CENTROIDS:
-        continue
-    lon, lat = STATE_CENTROIDS[state]
-    color = row['color']
-    rmse  = row['min_rmse']
+class PositionalEncoding(nn.Module):
+    """
+    Sinusoidal positional encoding.
+    batch_first=False : x shape [seq, batch, d_model]
+    batch_first=True  : x shape [batch, seq, d_model]
+    """
 
-    # Circle size proportional to RMSE (larger = worse best-case)
-    size  = 80 + rmse * 40
+    def __init__(self, d_model: int, max_len: int = 5000, batch_first: bool = False):
+        super().__init__()
+        self.batch_first = batch_first
+        pe       = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
 
-    ax.scatter(lon, lat, s=size, color=color, edgecolors='white',
-               linewidths=0.8, alpha=0.92, zorder=5)
-    ax.annotate(
-        state,
-        xy=(lon, lat), fontsize=6.5, fontweight='bold',
-        ha='center', va='center', color='white', zorder=6,
-        path_effects=[pe.withStroke(linewidth=1.5, foreground=color)]
-    )
+    def forward(self, x: Tensor) -> Tensor:
+        if self.batch_first:
+            return x + self.pe[:x.size(1), :].unsqueeze(0)
+        return x + self.pe[:x.size(0), :].unsqueeze(1)
 
-# ── 5. Legend ─────────────────────────────────────────────────────────────────
-models_in_map = plot_df['best_model'].unique()
-legend_patches = [
-    mpatches.Patch(color=MODEL_COLORS[m], label=m)
-    for m in MODELS if m in models_in_map
-]
-ax.legend(handles=legend_patches, title='Best Model',
-          loc='lower left', fontsize=8, title_fontsize=9,
-          framealpha=0.9, edgecolor='#cccccc')
 
-# ── 6. Labels & formatting ────────────────────────────────────────────────────
-commodity_label = COMMODITY.replace('_', ' ').replace('(900 ml)', '').strip()
-ax.set_title(
-    f'Best-Performing Model by State — {commodity_label}\n'
-    f'(colour = lowest mean RMSE model; circle size ∝ best-case RMSE)',
-    fontsize=11, fontweight='bold', pad=14, color='#1A1A1A'
-)
-ax.set_xlabel('Longitude', fontsize=9)
-ax.set_ylabel('Latitude',  fontsize=9)
-ax.set_xlim(-75, -32)
-ax.set_ylim(-35,   6)
-ax.grid(True, linestyle='--', alpha=0.3, color='grey')
-ax.tick_params(labelsize=8)
+# ===========================================================================
+# Vanilla Transformer encoder
+# ===========================================================================
 
-# Add RMSE annotation box
-textstr = 'Circle size proportional\nto min. mean RMSE (BRL/kg)'
-props = dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor='#cccccc')
-ax.text(0.98, 0.97, textstr, transform=ax.transAxes, fontsize=7.5,
-        verticalalignment='top', horizontalalignment='right', bbox=props)
+class TimeSeriesTransformer(nn.Module):
+    """
+    Transformer encoder-only model.
+    Input : [seq_len, batch, 1]  (batch_first=False)
+    Output: [batch]
+    """
 
-plt.tight_layout()
-plt.savefig(OUT_PNG, dpi=200, bbox_inches='tight', facecolor='white')
-print(f"Saved: {OUT_PNG}")
+    def __init__(self, input_dim: int = 1, d_model: int = 64,
+                 nhead: int = 8, num_layers: int = 2, dropout: float = 0.1):
+        super().__init__()
+        self.d_model      = d_model
+        self.input_linear = nn.Linear(input_dim, d_model)
+        self.pos_encoder  = PositionalEncoding(d_model, batch_first=False)
+        encoder_layer     = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=False)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.output_linear = nn.Linear(d_model, 1)
+        for layer in [self.input_linear, self.output_linear]:
+            layer.weight.data.uniform_(-0.1, 0.1)
+            layer.bias.data.zero_()
 
-# ── 7. Also save the numeric results table ────────────────────────────────────
-result_rows = []
-for state, rmse_dict in state_results.items():
-    best = min(rmse_dict, key=rmse_dict.get)
-    row  = {'State': state, 'Best Model': best, 'Min RMSE': round(min(rmse_dict.values()), 4)}
-    row.update({m: round(v, 4) for m, v in rmse_dict.items()})
-    result_rows.append(row)
+    def forward(self, src: Tensor) -> Tensor:
+        src    = self.input_linear(src) * math.sqrt(self.d_model)
+        src    = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        return self.output_linear(output[-1, :, :]).squeeze(1)
 
-result_df = pd.DataFrame(result_rows).sort_values('State')
-result_df.to_excel(f"map_data_{COMMODITY.lower()}.xlsx", index=False)
-print(f"Saved: map_data_{COMMODITY.lower()}.xlsx")
-plt.show()
+
+# ===========================================================================
+# Informer — ProbSparse attention
+# ===========================================================================
+
+class ProbSparseSelfAttention(nn.Module):
+    """
+    ProbSparse self-attention (Zhou et al., 2021).
+
+    Selects the top-U 'dominant' queries based on a sparsity measurement:
+        M(q_i, K) = max_j(q_i·k_j/sqrt(d)) - mean_j(q_i·k_j/sqrt(d))
+    Only those queries get full attention; all others are assigned the
+    mean-value context vector. This reduces complexity from O(L^2) to
+    O(L log L).
+
+    Falls back to full attention when the sequence is short enough that
+    the saving would be negligible.
+    """
+
+    def __init__(self, d_model: int, n_heads: int, factor: int = 5, dropout: float = 0.1):
+        super().__init__()
+        assert d_model % n_heads == 0
+        self.d_k     = d_model // n_heads
+        self.n_heads = n_heads
+        self.factor  = factor
+        self.W_Q     = nn.Linear(d_model, d_model, bias=False)
+        self.W_K     = nn.Linear(d_model, d_model, bias=False)
+        self.W_V     = nn.Linear(d_model, d_model, bias=False)
+        self.out     = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def _top_queries(self, Q: Tensor, K: Tensor, sample_k: int, n_top: int) -> Tensor:
+        """Return indices of the n_top most dominant queries."""
+        B, H, L_Q, d_k = Q.shape
+        L_K = K.shape[2]
+        # Randomly sample sample_k keys to estimate dominance
+        idx      = torch.randint(L_K, (L_Q, sample_k), device=Q.device)
+        K_sample = K.unsqueeze(3).expand(B, H, L_K, L_Q, d_k)
+        K_sample = K.unsqueeze(3).expand(
+            B, H, L_K, L_Q, d_k
+        )                                     # not used directly; use gather below
+        # Simpler gather approach
+        K_exp    = K[:, :, idx.view(-1), :].view(B, H, L_Q, sample_k, d_k)
+        QK       = torch.einsum('bhqd,bhqkd->bhqk', Q, K_exp)   # [B,H,L_Q,sample_k]
+        M        = QK.max(-1)[0] - QK.mean(-1)                  # dominance score
+        return M.topk(n_top, dim=-1)[1]                         # [B, H, n_top]
+
+    def forward(self, Q: Tensor, K: Tensor, V: Tensor) -> Tensor:
+        """Q, K, V: [batch, seq, d_model] → output: [batch, seq_Q, d_model]"""
+        B, L_Q, _ = Q.shape
+        L_K       = K.shape[1]
+
+        def project_and_split(W, x):
+            return W(x).view(B, -1, self.n_heads, self.d_k).transpose(1, 2)
+
+        Qq = project_and_split(self.W_Q, Q)   # [B, H, L_Q, d_k]
+        Kk = project_and_split(self.W_K, K)
+        Vv = project_and_split(self.W_V, V)
+
+        sample_k = min(self.factor * max(1, int(math.log(L_K + 1))), L_K)
+        n_top    = min(self.factor * max(1, int(math.log(L_Q + 1))), L_Q)
+
+        # Fall back to full attention for very short sequences
+        if n_top >= L_Q or sample_k >= L_K:
+            scores  = torch.matmul(Qq, Kk.transpose(-2, -1)) / math.sqrt(self.d_k)
+            context = torch.matmul(self.dropout(F.softmax(scores, dim=-1)), Vv)
+        else:
+            top_idx = self._top_queries(Qq, Kk, sample_k, n_top)   # [B, H, n_top]
+
+            # Default context = mean(V) for all positions
+            context = Vv.mean(dim=2, keepdim=True).expand(
+                B, self.n_heads, L_Q, self.d_k).clone()
+
+            # Gather top queries and compute their full attention
+            idx_exp = top_idx.unsqueeze(-1).expand(B, self.n_heads, n_top, self.d_k)
+            Q_top   = Qq.gather(2, idx_exp)                                  # [B,H,n_top,d_k]
+            scores  = torch.matmul(Q_top, Kk.transpose(-2, -1)) / math.sqrt(self.d_k)
+            ctx_top = torch.matmul(self.dropout(F.softmax(scores, dim=-1)), Vv)
+            context.scatter_(2, idx_exp, ctx_top)
+
+        context = context.transpose(1, 2).contiguous().view(B, L_Q, -1)
+        return self.out(context)
+
+
+class ConvDistillation(nn.Module):
+    """
+    Distilling layer between Informer encoder stacks.
+    Halves sequence length via MaxPool after a depthwise Conv1d + ELU + BN.
+    Input / output shape: [batch, seq_len, d_model]
+    """
+
+    def __init__(self, d_model: int):
+        super().__init__()
+        self.conv = nn.Conv1d(d_model, d_model, kernel_size=3, padding=1, groups=d_model)
+        self.norm = nn.BatchNorm1d(d_model)
+        self.pool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = x.transpose(1, 2)                              # [B, d_model, L]
+        x = self.pool(F.elu(self.norm(self.conv(x))))
+        return x.transpose(1, 2)                           # [B, L//2, d_model]
+
+
+class InformerEncoderLayer(nn.Module):
+    """ProbSparse attention → conv distillation → feed-forward."""
+
+    def __init__(self, d_model: int, n_heads: int, d_ff: int,
+                 factor: int = 5, dropout: float = 0.1):
+        super().__init__()
+        self.attn    = ProbSparseSelfAttention(d_model, n_heads, factor, dropout)
+        self.distill = ConvDistillation(d_model)
+        self.ffn     = nn.Sequential(
+            nn.Linear(d_model, d_ff), nn.GELU(),
+            nn.Dropout(dropout), nn.Linear(d_ff, d_model))
+        self.norm1   = nn.LayerNorm(d_model)
+        self.norm2   = nn.LayerNorm(d_model)
+        self.drop    = nn.Dropout(dropout)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.norm1(x + self.drop(self.attn(x, x, x)))
+        x = self.distill(x)
+        x = self.norm2(x + self.drop(self.ffn(x)))
+        return x
+
+
+class InformerDecoderLayer(nn.Module):
+    """
+    ProbSparse self-attention over decoder tokens,
+    full cross-attention over encoder memory,
+    feed-forward.
+    """
+
+    def __init__(self, d_model: int, n_heads: int, d_ff: int,
+                 factor: int = 5, dropout: float = 0.1):
+        super().__init__()
+        self.self_attn  = ProbSparseSelfAttention(d_model, n_heads, factor, dropout)
+        self.cross_attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout, batch_first=True)
+        self.ffn  = nn.Sequential(
+            nn.Linear(d_model, d_ff), nn.GELU(),
+            nn.Dropout(dropout), nn.Linear(d_ff, d_model))
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.drop  = nn.Dropout(dropout)
+
+    def forward(self, x: Tensor, memory: Tensor) -> Tensor:
+        x = self.norm1(x + self.drop(self.self_attn(x, x, x)))
+        attn_out, _ = self.cross_attn(x, memory, memory)
+        x = self.norm2(x + self.drop(attn_out))
+        x = self.norm3(x + self.drop(self.ffn(x)))
+        return x
+
+
+class Informer(nn.Module):
+    """
+    Informer encoder-decoder with ProbSparse attention.
+    Reference: Zhou et al., 2021  https://arxiv.org/abs/2012.07436
+
+    Input features (3 per timestep)
+    --------------------------------
+    [normalised_value, sin(2π·month/12), cos(2π·month/12)]
+
+    Encoder receives the full historical window.
+    Decoder receives a 'start token' (last label_len observations) concatenated
+    with zero-padded positions for the pred_len future steps, following the
+    original paper's generative decoding strategy.
+
+    Parameters
+    ----------
+    d_model   : Embedding dimension (default 64).
+    n_heads   : Attention heads — must divide d_model (default 8).
+    e_layers  : Encoder layers (default 2).
+    d_layers  : Decoder layers (default 1).
+    d_ff      : Feed-forward hidden dim (default 256).
+    factor    : ProbSparse sampling factor c (default 5).
+    dropout   : Dropout rate (default 0.1).
+    label_len : Start-token length fed to the decoder (default 12).
+    pred_len  : Forecast horizon (default 12).
+    """
+
+    def __init__(self, d_model: int = 64, n_heads: int = 8,
+                 e_layers: int = 2, d_layers: int = 1,
+                 d_ff: int = 256, factor: int = 5,
+                 dropout: float = 0.1,
+                 label_len: int = 12, pred_len: int = 12):
+        super().__init__()
+        self.label_len  = label_len
+        self.pred_len   = pred_len
+        in_features     = 3
+
+        self.enc_embed  = nn.Linear(in_features, d_model)
+        self.dec_embed  = nn.Linear(in_features, d_model)
+        self.enc_pos    = PositionalEncoding(d_model, batch_first=True)
+        self.dec_pos    = PositionalEncoding(d_model, batch_first=True)
+
+        self.encoder = nn.ModuleList([
+            InformerEncoderLayer(d_model, n_heads, d_ff, factor, dropout)
+            for _ in range(e_layers)
+        ])
+        self.decoder = nn.ModuleList([
+            InformerDecoderLayer(d_model, n_heads, d_ff, factor, dropout)
+            for _ in range(d_layers)
+        ])
+        self.projection = nn.Linear(d_model, 1)
+
+    @staticmethod
+    def build_features(values: Tensor, start_month: int) -> Tensor:
+        """
+        Concatenate normalised values with cyclic month encoding.
+
+        values      : [batch, seq_len] or [seq_len]
+        start_month : calendar month (1-12) of the first timestep
+        Returns     : [batch, seq_len, 3]
+        """
+        if values.dim() == 1:
+            values = values.unsqueeze(0)
+        B, L   = values.shape
+        device = values.device
+        months = ((torch.arange(L, device=device) + start_month - 1) % 12) + 1
+        angles = 2 * math.pi * months.float() / 12
+        sin_m  = angles.sin().unsqueeze(0).expand(B, -1)
+        cos_m  = angles.cos().unsqueeze(0).expand(B, -1)
+        return torch.stack([values, sin_m, cos_m], dim=-1)   # [B, L, 3]
+
+    def forward(self, x_enc: Tensor, x_dec: Tensor) -> Tensor:
+        """
+        x_enc : [batch, enc_len, 3]
+        x_dec : [batch, label_len + pred_len, 3]
+        Returns [batch, pred_len]
+        """
+        # Encoder
+        mem = self.enc_pos(self.enc_embed(x_enc))
+        for layer in self.encoder:
+            mem = layer(mem)
+
+        # Decoder
+        dec = self.dec_pos(self.dec_embed(x_dec))
+        for layer in self.decoder:
+            dec = layer(dec, mem)
+
+        out = self.projection(dec[:, -self.pred_len:, :])  # [B, pred_len, 1]
+        return out.squeeze(-1)                              # [B, pred_len]
