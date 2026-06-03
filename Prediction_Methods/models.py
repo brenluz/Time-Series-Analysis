@@ -11,6 +11,18 @@ PositionalEncoding    : Sinusoidal positional encoding (shared)
 TimeSeriesTransformer : Vanilla Transformer encoder
 Informer              : Full encoder-decoder Informer with ProbSparse attention
                         (Zhou et al., 2021)
+models.py
+---------
+PyTorch model architectures used for time-series forecasting.
+
+Models
+------
+LSTMModel             : 2-layer stacked LSTM
+GRUModel              : 2-layer stacked GRU
+PositionalEncoding    : Sinusoidal positional encoding (shared)
+TimeSeriesTransformer : Vanilla Transformer encoder
+Informer              : Full encoder-decoder Informer with ProbSparse attention
+                        (Zhou et al., 2021)
 """
 
 import math
