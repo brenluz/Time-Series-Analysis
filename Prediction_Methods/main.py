@@ -36,7 +36,7 @@ logging.basicConfig(
 # ---------------------------------------------------------------------------
 
 EXCEL_FILE_PATH  = "../Databases/DatabaseConabv5.xlsx"
-SHEET_NAME       = "FEIJAO"
+SHEET_NAME       = "BATATA"
 OUTPUT_HTML      = "sliding_rmse_boxplots.html"
 CACHE_DIR        = ".boxplot_cache"
 
@@ -54,7 +54,7 @@ EXCLUDE_STATES   = []
 #   "sliding_error_chart"    — mean RMSE by horizon for one model
 #   "Auto_Arima" | "ETS" | "Prophet" | "Random_Forest"
 #   "LSTM"       | "GRU" | "Transformer"
-MODEL_TO_RUN = "sliding_rmse_boxplots"
+MODEL_TO_RUN = "sliding_rmse_excel"
 
 def main():
     parser = argparse.ArgumentParser()
