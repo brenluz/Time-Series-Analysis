@@ -291,18 +291,12 @@ def sliding_rmse_boxplots(
 
     for r in range(n_rows):
         positions, labels = row_xticks[r]
-        fig.update_yaxes(range=[y_min, y_max], title_text="RMSE",
-                         title_font=dict(size=20), tickfont=dict(size=18),
-                         row=r + 1, col=1)
-        fig.update_xaxes(tickmode="array", tickvals=positions, ticktext=labels,
+        fig.update_yaxes(range=[y_min, y_max], title_text="",
                          tickfont=dict(size=18), row=r + 1, col=1)
+        fig.update_xaxes(tickmode="array", tickvals=positions, ticktext=labels,
+                         showticklabels=False, row=r + 1, col=1)
 
-    title_suffix = f" - {product_name}" if product_name else ""
     fig.update_layout(
-        title=dict(
-            text=f"RMSE Distribution by Forecast Step and Model{title_suffix}",
-            x=0.5, font=dict(size=22),
-        ),
         width=1400,
         height=600 * n_rows,
         template="plotly_white",
@@ -315,7 +309,7 @@ def sliding_rmse_boxplots(
             xanchor="center", x=0.5,
             font=dict(size=18), tracegroupgap=4,
         ),
-        margin=dict(t=60, b=120, l=60, r=20),
+        margin=dict(t=20, b=120, l=60, r=20),
     )
 
     fig.write_html(output_html, auto_open=True)
