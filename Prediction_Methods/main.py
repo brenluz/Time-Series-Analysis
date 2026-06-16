@@ -173,3 +173,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # All output files are written and flushed inside main(). Some dependencies
+    # (kaleido's Chrome subprocess, torch thread pools, the Windows process
+    # pool) can leave background threads/subprocesses alive that hang the
+    # interpreter at shutdown and freeze the terminal. Force an immediate,
+    # clean exit so control returns to the shell.
+    import sys
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
