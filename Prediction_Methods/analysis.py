@@ -104,6 +104,39 @@ def _resolve_max_workers(n_jobs: int) -> int:
     return min(requested, cpu_total)
 
 
+def _force_shutdown(executor) -> None:
+    """
+    Shut down a ProcessPoolExecutor without the graceful join that can hang.
+
+    On Windows, worker processes that initialised a CUDA context (the NVIDIA
+    machine) can fail to exit cleanly, so the default shutdown(wait=True)
+    blocks forever and freezes the terminal once all work is done. Callers
+    invoke this only after every future has already been drained, so we can
+    safely terminate the now-idle workers directly instead of joining them.
+    """
+    procs = list(getattr(executor, "_processes", {}).values())
+    executor.shutdown(wait=False, cancel_futures=True)
+    for p in procs:
+        try:
+            if p.is_alive():
+                p.terminate()
+        except Exception:
+            pass
+
+
+def _log_model_timings(timings_by_model: dict, context: str = "") -> None:
+    """Log mean wall-clock runtime per model across all freshly computed windows."""
+    rows = [(m, sum(ts) / len(ts), len(ts))
+            for m, ts in timings_by_model.items() if ts]
+    if not rows:
+        logger.info("Model runtimes: nothing timed (all windows served from cache).")
+        return
+    suffix = f" ({context})" if context else ""
+    logger.info(f"Average model runtime per window{suffix}:")
+    for model, mean_t, n in sorted(rows, key=lambda r: r[1], reverse=True):
+        logger.info(f"  {model:<14s} {mean_t:8.2f}s   (n={n} windows)")
+
+
 def _run_parallel(jobs: list, job_meta: list, cache_dir: str, n_jobs: int,
                   desc: str = "Computing windows"):
     """
@@ -111,13 +144,16 @@ def _run_parallel(jobs: list, job_meta: list, cache_dir: str, n_jobs: int,
 
     Returns
     -------
-    results : list of (state, result_dict) in completion order
+    results          : list of (state, errors_dict) in completion order
+    timings_by_model : dict model_name -> list[float] of per-window runtimes
     """
     full_jobs = [(*job, cache_dir) for job in jobs]
     results   = []
+    timings_by_model: dict = {}
 
     max_workers = _resolve_max_workers(n_jobs)
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    executor = ProcessPoolExecutor(max_workers=max_workers)
+    try:
         futures = {
             executor.submit(_worker, job): idx
             for idx, job in enumerate(full_jobs)
@@ -126,11 +162,16 @@ def _run_parallel(jobs: list, job_meta: list, cache_dir: str, n_jobs: int,
                            desc=desc, unit="window"):
             idx = futures[future]
             try:
-                results.append((job_meta[idx], future.result()))
+                errors, timings = future.result()
+                results.append((job_meta[idx], errors))
+                for model_name, elapsed in timings.items():
+                    timings_by_model.setdefault(model_name, []).append(elapsed)
             except Exception as exc:
                 logger.error(f"Window failed: {exc}")
+    finally:
+        _force_shutdown(executor)
 
-    return results
+    return results, timings_by_model
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +224,8 @@ def sliding_rmse_boxplots(
 
     # --- Accumulate squared errors per (state, model, step) ---
     sq_errors_by_state: dict = {}
-    for state, result in _run_parallel(jobs, job_meta, cache_dir, n_jobs):
+    parallel_results, timings_by_model = _run_parallel(jobs, job_meta, cache_dir, n_jobs)
+    for state, result in parallel_results:
         if state not in sq_errors_by_state:
             sq_errors_by_state[state] = {
                 m: [[] for _ in range(test_periods)] for m in MODEL_FUNCS
@@ -192,6 +234,8 @@ def sliding_rmse_boxplots(
             for step, ae in enumerate(abs_errors):
                 if step < test_periods:
                     sq_errors_by_state[state][model_name][step].append(ae ** 2)
+
+    _log_model_timings(timings_by_model, product_name)
 
     # --- One RMSE scalar per (state, model, step) ---
     rmse_by_step = {step: {m: [] for m in MODEL_FUNCS} for step in range(test_periods)}
@@ -385,8 +429,10 @@ def sliding_rmse_excel(
 
     full_jobs = [(*job, cache_dir) for job in jobs_raw]
     raw_results: dict = {}
+    timings_by_model: dict = {}
 
-    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+    executor = ProcessPoolExecutor(max_workers=n_jobs)
+    try:
         futures = {executor.submit(_worker, job): idx
                    for idx, job in enumerate(full_jobs)}
         for future in tqdm(as_completed(futures), total=len(futures),
@@ -394,9 +440,16 @@ def sliding_rmse_excel(
             idx = futures[future]
             state, window_label = job_meta_raw[idx]
             try:
-                raw_results[(state, window_label)] = future.result()
+                errors, timings = future.result()
+                raw_results[(state, window_label)] = errors
+                for model_name, elapsed in timings.items():
+                    timings_by_model.setdefault(model_name, []).append(elapsed)
             except Exception as exc:
                 logger.error(f"Window ({state}, {window_label}) failed: {exc}")
+    finally:
+        _force_shutdown(executor)
+
+    _log_model_timings(timings_by_model, product_name)
 
     model_names = list(MODEL_FUNCS.keys())
     step_labels = [f"Step {k + 1}" for k in range(test_periods)]
